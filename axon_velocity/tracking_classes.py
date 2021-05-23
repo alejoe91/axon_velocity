@@ -703,8 +703,9 @@ class GraphAxonTracking(AxonTracking):
                     if final_len < initial_len and self._verbose:
                         print(f"Removed {initial_len - final_len} outliers from branch {p_i} - final r2: {r2}")
 
-
+                    add_full_path = True
                     branches_to_add = []
+
                     peak_diff = np.diff(peaks)
                     if np.max(peak_diff) > self._max_peak_latency_for_splitting and self._split_paths:
                         # split
@@ -721,6 +722,8 @@ class GraphAxonTracking(AxonTracking):
                                     subpath_idxs.append(np.arange(split_points[i_sp - 1], sp))
                             subpath_idxs.append(np.arange(split_points[-1], len(path_rev)))
 
+                            full_path_r2 = r2
+                            sub_branches = []
                             for i_s, idxs in enumerate(subpath_idxs):
                                 subpeaks = peaks[idxs]
                                 subdists = dists[idxs]
@@ -745,11 +748,19 @@ class GraphAxonTracking(AxonTracking):
                                             branch_dict['distances'] = np.array(subdists)
                                             branch_dict['peak_times'] = np.array(subpeaks)
                                             branch_dict['raw_path_idx'] = p_i #sorted_idxs[p_i]
-                                            branches_to_add.append(branch_dict)
+                                            sub_branches.append(branch_dict)
                                             if self._verbose > 0:
                                                 print(f"Added split sub path {i_s} from parent path: {p_i}")
 
-                    else:
+                            if len(sub_branches) > 0:
+                                r2s = [br["r2"] for br in sub_branches]
+                                if np.mean(r2s) > full_path_r2:
+                                    # In this case do not add the ful path, but only the sub-branches
+                                    add_full_path = False
+                                    for branch_dict in sub_branches:
+                                        branches_to_add.append(branch_dict)
+
+                    if add_full_path:
                         # re-append branch point
                         path_rev = np.array([path[-1]] + list(path_rev))
                         if self._is_path_valid(path_rev):
