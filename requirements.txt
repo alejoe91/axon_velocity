@@ -1,0 +1,7 @@
+numpy
+networkx
+matplotlib
+scipy
+MEAutility
+LFPy
+neuroplotlib
