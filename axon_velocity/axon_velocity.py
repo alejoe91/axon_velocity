@@ -1,92 +1,6 @@
 from copy import deepcopy
 
-from .tracking_classes import GraphAxonTracking, SimpleAxonTracking
-
-
-def compute_simple_propagation_velocity(template, locations, fs, upsample=1, init_delay=0, min_points=10,
-                                        detect_threshold=0.1, kurt_threshold=0.3, remove_isolated=True,
-                                        detection_type="relative",  r2_threshold=None, min_path_length=100,
-                                        verbose=False, debug_mode=False):
-    """
-    Compute velocity of branches using a simple standard approach.
-    After an initial channel selection based on amplitude, kurtosis, and initial delay, velocity is fitted on the
-    peak latency and distance of each channel with respect to the initial channel (largest amplitude).
-
-    Parameters
-    ----------
-    template: np.array (num_channels x num_timepoints)
-        The template to compute spread on
-    locations: np.array (num_channels x 2)
-        The channel locations
-    fs: float
-        Sampling frequency in Hz
-    upsample: int
-        Upsanpling factor (default 10)
-    init_delay: int
-        Delay in ms from starting frame to discard channels (default 0)
-    min_points: int
-        Minimum number of channels to run traciing algorithm
-    detect_threshold: float
-        Detection threshold relative to max amplitude (default 0.1)
-    kurt_threshold: float
-        Threshold on kurtosis for single channel templates (default 0.3). The channels containing a spike are expected
-        to be super-gaussian (kurtosis > 0)
-    remove_isolated: bool
-        If True (default), isolated channels are removed
-    detection_type: str
-        "relative": detection threshold is relative to max amplitude
-        "absolute": detection threshold is absolute
-    r2_threshold: float
-        Threshold on the r2 values of velocity estimation to keep a branch (default 0.9)
-    verbose: bool
-        If True the output is verbose
-    debug_mode: bool
-        If True, several plots are created to debug
-
-    Returns
-    -------
-    gtr: SimpleAxonTracking
-        Output object containing the following fields:
-        - branches
-            List of dictionaries containing the following fields:
-                - 'selected_channels': selected channels in the path
-                - 'velocity': velocity estimate in mm/s (if locations in um and fs in Hz)
-                - 'offset': offset of velocity estimate (same units as locations)
-                - 'r2': r-squared of the velocoty fit
-                - 'error': standard error of the linear fit
-                - 'pval': p_value of the fit
-                - 'distances': array with distances computed along the branch
-                - 'peak_times': array with peak differences with initial channel
-                - 'init_channel': channel used as initial channel
-    """
-    if debug_mode:
-        print("\n\n##############################")
-        print("######### DEBUG MODE #########")
-        print("##############################\n\n")
-        verbose = True
-
-    smtr = SimpleAxonTracking(template, locations, fs, min_points=min_points,
-                             init_delay=init_delay,
-                             detect_threshold=detect_threshold,
-                             kurt_threshold=kurt_threshold,
-                             remove_isolated=remove_isolated,
-                             detection_type=detection_type,
-                             r2_threshold=r2_threshold,
-                             upsample=upsample,
-                             min_path_length=min_path_length,
-                             verbose=verbose)
-    smtr.track_axons()
-
-    if debug_mode:
-        _ = smtr.plot_channel_selection()
-        _ = smtr.plot_velocities()
-
-    return smtr
-
-
-def get_default_simple_velocity_params():
-    return deepcopy(SimpleAxonTracking.default_params)
-
+from .tracking_classes import GraphAxonTracking
 
 def compute_graph_propagation_velocity(template, locations, fs, upsample=1, init_delay=0,
                                        detect_threshold=0.1, kurt_threshold=0.3,
@@ -97,7 +11,8 @@ def compute_graph_propagation_velocity(template, locations, fs, upsample=1, init
                                        init_amp_peak_ratio=0.2, edge_dist_amp_ratio=0.3,
                                        min_points_after_branching=3, max_peak_latency_for_splitting=1,
                                        theilsen_maxiter=2000, split_paths=True,
-                                       distance_exp=2, neighbor_radius=100, neighbor_selection="dist",
+                                       distance_exp=2, neighbor_radius=100,
+                                       r2_threshold_for_outliers=0.98, min_outlier_tracking_error=50,
                                        verbose=False, debug_mode=False):
     """
     Compute velocity of branches using a graph-based approach.
@@ -163,9 +78,10 @@ def compute_graph_propagation_velocity(template, locations, fs, upsample=1, init
         Exponent of distance to penalize long jumps (default 2)
     neighbor_radius: float
         Radius to exclude neighboring channels around an identified path (default 50)
-    neighbor_selection: str
-        - "dist": 'n_neighbors' in graph are selected based on proximity only
-        - "amp": 'n_neighbors' in graph are selected based on amplitude (within 'max_distance_for_edge')
+    r2_threshold_for_outliers: float
+        R2 value below which the algorithm looks for outliers in the fitting (default 0.98)
+    min_outlier_tracking_error: float
+        Minimum tracking error for a channel to be considered an outlier
     theilsen_maxiter: int
         Maximum number of iteration for TheilSen regressor
     split_paths: bool
@@ -220,7 +136,8 @@ def compute_graph_propagation_velocity(template, locations, fs, upsample=1, init
                             max_peak_latency_for_splitting=max_peak_latency_for_splitting,
                             distance_exp=distance_exp,
                             neighbor_radius=neighbor_radius,
-                            neighbor_selection=neighbor_selection,
+                            r2_threshold_for_outliers=r2_threshold_for_outliers,
+                            min_outlier_tracking_error=min_outlier_tracking_error,
                             init_amp_peak_ratio=init_amp_peak_ratio,
                             edge_dist_amp_ratio=edge_dist_amp_ratio,
                             theilsen_maxiter=theilsen_maxiter,

@@ -3,6 +3,10 @@ from scipy.stats import linregress, kurtosis
 from scipy.signal import resample_poly
 from scipy.stats import pearsonr, median_abs_deviation
 from sklearn import linear_model
+
+import pandas as pd
+from statsmodels.formula.api import ols
+
 import matplotlib.pylab as plt
 import networkx as nx
 from matplotlib import gridspec
@@ -200,38 +204,49 @@ class AxonTracking:
                 if filt == 'detect':
                     ax_detect = axes[ax_id]
                     ax_detect.set_title(f"Detection threshold: {self._detect_threshold}")
-                    plot_template(self.template, self.locations, colors='gray', alpha=0.3, vscale=vscale, ax=ax_detect)
-                    plot_template(self.template, self.locations, colors='k', channels=self._selected_channels_detect,
-                                  vscale=self._vscale, ax=ax_detect)
+                    channels_detection = np.array(list(self._selected_channels_detect))
+                    ax_detect.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="", alpha=0.2)
+                    ax_detect.plot(self.locations[channels_detection, 0],
+                             self.locations[channels_detection, 1], marker=".", color="k", ls="", alpha=0.5)
+                    ax_detect.axis("off")
                 elif filt == 'kurtosis':
                     ax_kurt = axes[ax_id]
                     ax_kurt.set_title(f"Kurtosis threshold: {self._kurt_threshold}")
-                    plot_template(self.template, self.locations, colors='gray', alpha=0.3, vscale=vscale, ax=ax_kurt)
-                    plot_template(self.template, self.locations, colors='k', channels=self._selected_channels_kurt,
-                                  vscale=self._vscale, ax=ax_kurt)
+                    channels_kurt = np.array(list(self._selected_channels_kurt))
+                    ax_kurt.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="",
+                                 alpha=0.2)
+                    ax_kurt.plot(self.locations[channels_kurt, 0],
+                                 self.locations[channels_kurt, 1], marker=".", color="k", ls="", alpha=0.5)
+                    ax_kurt.axis("off")
                 elif filt == 'peak_std':
                     ax_peak = axes[ax_id]
                     ax_peak.set_title(f"Peak std threshold {self._peak_std_threhsold}")
-                    plot_template(self.template, self.locations, colors='gray', alpha=0.3, vscale=vscale, ax=ax_peak)
-                    plot_template(self.template, self.locations, colors='k', channels=self._selected_channels_peakstd,
-                                  vscale=self._vscale, ax=ax_peak)
+                    channels_peak = np.array(list(self._selected_channels_peakstd))
+                    ax_peak.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="",
+                                   alpha=0.2)
+                    ax_peak.plot(self.locations[channels_peak, 0],
+                                   self.locations[channels_peak, 1], marker=".", color="k", ls="", alpha=0.5)
+                    ax_peak.axis("off")
                 elif filt == 'init_delay':
                     ax_init = axes[ax_id]
                     ax_init.set_title(f"Init delay threshold: {self._init_delay}")
-                    plot_template(self.template, self.locations, colors='gray', alpha=0.3, vscale=vscale, ax=ax_init)
-                    plot_template(self.template, self.locations, colors='k', channels=self._selected_channels_init,
-                                  vscale=self._vscale, ax=ax_init)
-                    plot_template(self.template, self.locations, colors='r', channels=[self.init_channel],
-                                  vscale=self._vscale, ax=ax_init)
+                    channels_init = np.array(list(self._selected_channels_init))
+                    ax_init.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="",
+                                 alpha=0.2)
+                    ax_init.plot(self.locations[channels_init, 0],
+                                 self.locations[channels_init, 1], marker=".", color="k", ls="", alpha=0.5)
+                    ax_init.plot(*self.locations[self.init_channel], marker=".", color="r", ls="", alpha=0.5)
+                    ax_init.axis("off")
                 ax_id += 1
 
             ax_all = axes[ax_id]
             ax_all.set_title(f"All thresholds")
-            plot_template(self.template, self.locations, colors='gray', alpha=0.3, vscale=vscale, ax=ax_all)
-            plot_template(self.template, self.locations, colors='k', channels=self.selected_channels,
-                          vscale=self._vscale, ax=ax_all)
-            plot_template(self.template, self.locations, colors='r', channels=[self.init_channel],
-                          vscale=self._vscale, ax=ax_all)
+            ax_all.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="",
+                        alpha=0.2)
+            ax_all.plot(self.locations[self.selected_channels, 0],
+                        self.locations[self.selected_channels, 1], marker=".", color="k", ls="", alpha=0.5)
+            ax_all.plot(*self.locations[self.init_channel], marker=".", color="r", ls="", alpha=0.5)
+            ax_all.axis("off")
 
             fig.subplots_adjust(top=0.8)
             fig.suptitle("Channel selection", fontsize=20, y=0.95)
@@ -245,68 +260,6 @@ class AxonTracking:
         raise NotImplementedError
 
 
-class SimpleAxonTracking(AxonTracking):
-    """
-    Class to perform simple axonal tracking.
-    """
-    default_params = dict(upsample=1, init_delay=0, detect_threshold=0.1,
-                          kurt_threshold=0.3, peak_std_threshold=None, peak_std_distance=30,
-                          detection_type="relative", remove_isolated=True, min_selected_points=30, min_path_length=100,
-                          min_path_points=5, r2_threshold=None)
-
-    def __init__(self, template, locations, fs, upsample=1, init_delay=0, detect_threshold=0.1,
-                 kurt_threshold=0.3, peak_std_threshold=None, peak_std_distance=30, remove_isolated=True,
-                 detection_type="relative", min_selected_points=30, min_path_length=100, min_path_points=5,
-                 r2_threshold=None, verbose=False):
-        AxonTracking.__init__(self, template, locations, fs, upsample=upsample, init_delay=init_delay,
-                              detect_threshold=detect_threshold, detection_type=detection_type,
-                              kurt_threshold=kurt_threshold, peak_std_threshold=peak_std_threshold,
-                              peak_std_distance=peak_std_distance, remove_isolated=remove_isolated,
-                              min_selected_points=min_selected_points,
-                              min_path_length=min_path_length, min_path_points=min_path_points,
-                              r2_threshold=r2_threshold, verbose=verbose)
-        self.distances = None
-
-    def track_axons(self):
-        self.select_channels()
-
-        if self.compute_velocity:
-            distances = []
-            peaks = []
-            for ch in self.selected_channels:
-                peaks.append(self.peak_times[ch] - self.peak_times[self.init_channel]) / self.fs * 1000
-                distances.append(np.linalg.norm(self.locations[ch] - self.locations[self.init_channel]))
-            velocity, offset, r_value, p_value, std_err = linregress(peaks, distances)
-            r2 = r_value ** 2
-
-            branch_dict = {}
-            branch_dict['channels'] = self.selected_channels
-            branch_dict['velocity'] = velocity
-            branch_dict['offset'] = offset
-            branch_dict['r2'] = r2
-            branch_dict['pval'] = p_value
-            branch_dict['distances'] = np.array(distances)
-            branch_dict['peak_times'] = np.array(peaks)
-            branch_dict['raw_path_idx'] = 0
-            self.branches = [branch_dict]
-        else:
-            raise Exception("Not enough channels selected to compute velocity")
-
-    def plot_velocities(self, fig=None, cmap='rainbow'):
-        if fig is None:
-            fig = plt.figure()
-        ax_vel = fig.add_subplot(111)
-
-        cm = plt.get_cmap(cmap)
-        color = cm(0)
-        branch = self.branches[0]
-        plot_velocity(np.array(branch['peak_times']), np.array(branch['distances']),
-                      branch['velocity'], branch['offset'], color=color, r2=branch['r2'],
-                      ax=ax_vel)
-
-        return fig
-
-
 class GraphAxonTracking(AxonTracking):
     """
     Class to perform graph-based axonal tracking.
@@ -317,8 +270,9 @@ class GraphAxonTracking(AxonTracking):
                           min_selected_points=30, min_path_length=100, min_path_points=5,
                           min_points_after_branching=3, r2_threshold=0.9, max_distance_for_edge=300,
                           max_distance_to_init=200, mad_threshold=8, n_neighbors=3, init_amp_peak_ratio=0.2,
-                          edge_dist_amp_ratio=0.3, distance_exp=2, max_peak_latency_for_splitting=1,
-                          theilsen_maxiter=2000, neighbor_selection="amp", neighbor_radius=100, split_paths=True)
+                          edge_dist_amp_ratio=0.3, distance_exp=2, max_peak_latency_for_splitting=0.5,
+                          r2_threshold_for_outliers=0.98, min_outlier_tracking_error=50,
+                          theilsen_maxiter=2000, neighbor_radius=100, split_paths=True)
 
     def __init__(self, template, locations, fs, upsample=1, init_delay=0,
                  detect_threshold=0.1, kurt_threshold=0.3, peak_std_threshold=None, remove_isolated=True,
@@ -326,7 +280,8 @@ class GraphAxonTracking(AxonTracking):
                  min_selected_points=30, min_path_length=100, min_path_points=5, r2_threshold=0.9,
                  max_distance_for_edge=300, max_distance_to_init=200, n_neighbors=3, init_amp_peak_ratio=0.2,
                  min_points_after_branching=3, max_peak_latency_for_splitting=1, theilsen_maxiter=2000,
-                 edge_dist_amp_ratio=0.3, mad_threshold=5, distance_exp=2, neighbor_selection="amp",
+                 edge_dist_amp_ratio=0.3, mad_threshold=5, distance_exp=2,
+                 r2_threshold_for_outliers=0.98, min_outlier_tracking_error=50,
                  neighbor_radius=100, split_paths=True, verbose=False):
         AxonTracking.__init__(self, template, locations, fs, upsample=upsample, init_delay=init_delay,
                               detect_threshold=detect_threshold, kurt_threshold=kurt_threshold,
@@ -342,13 +297,13 @@ class GraphAxonTracking(AxonTracking):
         self._mad_threshold = mad_threshold
         self._distance_exp = distance_exp
         self._neighbor_radius = neighbor_radius
-        assert neighbor_selection in ["dist", "amp"]
         self._edge_dist_amp_ratio = edge_dist_amp_ratio
-        self._neighbor_selection = neighbor_selection
         self._max_peak_latency_for_splitting = max_peak_latency_for_splitting
         self._min_points_after_branching = min_points_after_branching
         self._theilsen_maxiter = theilsen_maxiter
         self._split_paths = split_paths
+        self._r2_threshold_for_outliers = r2_threshold_for_outliers
+        self._min_outlier_tracking_error = min_outlier_tracking_error
 
         self._node_heuristic = None
         self._selected_channels_sorted = None
@@ -489,6 +444,9 @@ class GraphAxonTracking(AxonTracking):
                 # if not, continue
                 if np.any(h_init_neigh > self.graph.nodes[source_node]['h_init']):
                     continue
+                if source_node == target_node:
+                    continue
+
                 init_path_.append(source_node)
 
                 # if node is not in black list
@@ -671,126 +629,26 @@ class GraphAxonTracking(AxonTracking):
             for path in self._paths_raw:
                 path_lengths.append(self.compute_path_length(path))
 
-            # sorted_idxs = np.argsort(path_lengths)[::-1]
-            # sorted_paths = [self._paths_raw[sorted_idx] for sorted_idx in sorted_idxs]
-
-            # Create branch dictionary
+            # create branches to add
             branches = []
             self._paths_clean = []
             for p_i, path in enumerate(self._paths_raw):
-                # skip branch point
-                path_rev = path[::-1][1:]
-                peaks = (self.peak_times[path_rev] - self.peak_times[path_rev[0]]) / self.fs * 1000
+                # try splitting paths
+                branches_to_add = self.split_paths(path, p_i, remove_outliers)
 
-                dists = []
-                cum_dist = 0
-                for i, p in enumerate(path_rev):
-                    if i == 0:
-                        cum_dist += 0
+                for branch in branches_to_add:
+                    add_branch = False
+                    if self._r2_threshold is None:
+                        add_branch = True
+                    elif branch['r2'] > self._r2_threshold:
+                        add_branch = True
                     else:
-                        cum_dist += np.linalg.norm(self.locations[p] - self.locations[path_rev[i - 1]])
-                    dists.append(cum_dist)
-                peaks = np.array(peaks)
-                dists = np.array(dists)
-
-                # Use TheilSenRegressor for more robust model amd to remove outliers
-                initial_len = len(path_rev)
-                path_rev, velocity, offset, r2, p_value, std_err, dists, peaks \
-                    = self.robust_velocity_estimator(path_rev, peaks, dists, remove_outliers)
-                if path_rev is not None:
-                    final_len = len(path_rev)
-
-                    if final_len < initial_len and self._verbose:
-                        print(f"Removed {initial_len - final_len} outliers from branch {p_i} - final r2: {r2}")
-
-                    add_full_path = True
-                    branches_to_add = []
-
-                    peak_diff = np.diff(peaks)
-                    if np.max(peak_diff) > self._max_peak_latency_for_splitting and self._split_paths:
-                        # split
-                        split_points = np.where(peak_diff > 1)[0]
-                        if len(split_points) > 0:
-                            if self._verbose > 0:
-                                print(f"Attempting to split branch {p_i} in {len(split_points) + 1}")
-
-                            subpath_idxs = []
-                            for i_sp, sp in enumerate(split_points):
-                                if i_sp == 0:  # first path
-                                    subpath_idxs.append(np.arange(0, sp))
-                                else:  # other paths if more than one selected
-                                    subpath_idxs.append(np.arange(split_points[i_sp - 1], sp))
-                            subpath_idxs.append(np.arange(split_points[-1], len(path_rev)))
-
-                            full_path_r2 = r2
-                            sub_branches = []
-                            for i_s, idxs in enumerate(subpath_idxs):
-                                subpeaks = peaks[idxs]
-                                subdists = dists[idxs]
-                                subpath = list(np.array(path_rev)[idxs])
-
-                                if len(subpath) > 2:
-                                    subpath, velocity, offset, r2, p_value, std_err, subdists, subpeaks \
-                                        = self.robust_velocity_estimator(subpath, subpeaks, subdists, remove_outliers)
-
-                                    if subpath is not None:
-                                        if i_s == 0:
-                                            # re append branch point
-                                            subpath = np.array([path[-1]] + list(subpath))
-
-                                        if self._is_path_valid(subpath):
-                                            branch_dict = {}
-                                            branch_dict['channels'] = subpath.astype(int)
-                                            branch_dict['velocity'] = velocity
-                                            branch_dict['offset'] = offset
-                                            branch_dict['r2'] = r2
-                                            branch_dict['pval'] = p_value
-                                            branch_dict['distances'] = np.array(subdists)
-                                            branch_dict['peak_times'] = np.array(subpeaks)
-                                            branch_dict['raw_path_idx'] = p_i #sorted_idxs[p_i]
-                                            sub_branches.append(branch_dict)
-                                            if self._verbose > 0:
-                                                print(f"Added split sub path {i_s} from parent path: {p_i}")
-
-                            if len(sub_branches) > 0:
-                                r2s = [br["r2"] for br in sub_branches]
-                                if np.mean(r2s) > full_path_r2:
-                                    # In this case do not add the ful path, but only the sub-branches
-                                    add_full_path = False
-                                    for branch_dict in sub_branches:
-                                        branches_to_add.append(branch_dict)
-
-                    if add_full_path:
-                        # re-append branch point
-                        path_rev = np.array([path[-1]] + list(path_rev))
-                        if self._is_path_valid(path_rev):
-                            branch_dict = {}
-                            branch_dict['channels'] = path_rev.astype(int)
-                            branch_dict['velocity'] = velocity
-                            branch_dict['offset'] = offset
-                            branch_dict['r2'] = r2
-                            branch_dict['pval'] = p_value
-                            branch_dict['distances'] = np.array(dists)
-                            branch_dict['peak_times'] = np.array(peaks)
-                            branch_dict['raw_path_idx'] = p_i #sorted_idxs[p_i]
-                            branches_to_add.append(branch_dict)
-
-                    for branch in branches_to_add:
-                        add_branch = False
-                        if self._r2_threshold is None:
-                            add_branch = True
-                        elif branch['r2'] > self._r2_threshold:
-                            add_branch = True
-                        else:
-                            if self._verbose > 0:
-                                print(f"Branch {p_i} removed for low R2: {r2}")
-                        if add_branch:
-                            # for path_to_add in paths_to_add:
-                            self._paths_clean.append(branch['channels'])
-                            branches.append(branch)
-                else:
-                    if self._verbose > 0:
-                        print(f"No points remaining for paht {p_i}")
+                        if self._verbose > 0:
+                            print(f"Branch {p_i} removed for low R2: {branch['r2']}")
+                    if add_branch:
+                        # for path_to_add in paths_to_add:
+                        self._paths_clean.append(branch['channels'])
+                        branches.append(branch)
 
             if len(branches) == 0:
                 raise Exception("No branches left after cleaning")
@@ -814,20 +672,144 @@ class GraphAxonTracking(AxonTracking):
 
         return length
 
+    def _estimate_peaks_and_dists(self, path):
+        peaks = (self.peak_times[path] - self.peak_times[path[0]]) / self.fs * 1000
+        dists = []
+        cum_dist = 0
+        for i, p in enumerate(path):
+            if i == 0:
+                cum_dist += 0
+            else:
+                cum_dist += np.linalg.norm(self.locations[p] - self.locations[path[i - 1]])
+            dists.append(cum_dist)
+        peaks = np.array(peaks)
+        dists = np.array(dists)
+        return peaks, dists
+
+    def split_paths(self, path, p_i, remove_outliers):
+        """This function tries to split paths into subpaths with a better linear fit"""
+        branches_to_add = []
+        # skip branch point from computation and revert order
+        path_rev = path[::-1][1:]
+
+        # get peak latencies and distances for the linear fit
+        peaks, dists = self._estimate_peaks_and_dists(path_rev)
+
+        # robust linear fit
+        initial_len = len(path_rev)
+        path_rev, velocity, offset, r2, p_value, dists, peaks, inlier_mask \
+            = self.robust_velocity_estimator(path_rev, peaks, dists, remove_outliers)
+        full_path_r2 = r2
+        if path_rev is not None:
+            add_full_path = True
+            peak_diff = np.diff(peaks)
+
+            if np.max(peak_diff) > self._max_peak_latency_for_splitting and self._split_paths:
+                # split
+                split_points = np.where(peak_diff > 1)[0]
+                if len(split_points) > 0:
+                    if self._verbose > 0:
+                        print(f"Attempting to split branch {p_i} in {len(split_points) + 1}")
+
+                    subpath_idxs = []
+                    for i_sp, sp in enumerate(split_points):
+                        if i_sp == 0:  # first path
+                            subpath_idxs.append(np.arange(0, sp))
+                        else:  # other paths if more than one selected
+                            subpath_idxs.append(np.arange(split_points[i_sp - 1], sp))
+                    subpath_idxs.append(np.arange(split_points[-1], len(path_rev)))
+
+                    sub_branches = []
+                    for i_s, idxs in enumerate(subpath_idxs):
+                        subpeaks = peaks[idxs]
+                        subdists = dists[idxs]
+                        subpath = list(np.array(path_rev)[idxs])
+
+                        if len(subpath) > 2:
+                            subpath, subvelocity, suboffset, subr2, subp_value, subdists, subpeaks, inlier_mask \
+                                = self.robust_velocity_estimator(subpath, subpeaks, subdists, remove_outliers)
+
+                            if subpath is not None:
+                                if i_s == 0:
+                                    # re append branch point
+                                    subpath = np.array([path[-1]] + list(subpath))
+
+                                if self._is_path_valid(subpath):
+                                    branch_dict = {}
+                                    branch_dict['channels'] = subpath.astype(int)
+                                    branch_dict['velocity'] = subvelocity
+                                    branch_dict['offset'] = suboffset
+                                    branch_dict['r2'] = subr2
+                                    branch_dict['pval'] = subp_value
+                                    branch_dict['distances'] = np.array(subdists)
+                                    branch_dict['peak_times'] = np.array(subpeaks)
+                                    branch_dict['raw_path_idx'] = p_i
+                                    sub_branches.append(branch_dict)
+                                    if self._verbose > 0:
+                                        print(f"Added split sub path {i_s} from parent path {p_i} with {len(subpath)} "
+                                              f"points")
+
+                    if len(sub_branches) > 0:
+                        r2s = [br["r2"] for br in sub_branches]
+                        if np.mean(r2s) > full_path_r2:
+                            # In this case do not add the ful path, but only the sub-branches
+                            add_full_path = False
+                            for branch_dict in sub_branches:
+                                branches_to_add.append(branch_dict)
+
+            if add_full_path:
+                final_len = len(path_rev)
+
+                if final_len < initial_len and self._verbose > 0:
+                    print(f"Removed {initial_len - final_len} outliers from branch {p_i} - final r2: {r2}")
+
+                # re-append branch point
+                path = np.array([path[-1]] + list(path_rev))
+                if self._is_path_valid(path):
+                    branch_dict = {}
+                    branch_dict['channels'] = path.astype(int)
+                    branch_dict['velocity'] = velocity
+                    branch_dict['offset'] = offset
+                    branch_dict['r2'] = r2
+                    branch_dict['pval'] = p_value
+                    branch_dict['distances'] = np.array(dists)
+                    branch_dict['peak_times'] = np.array(peaks)
+                    branch_dict['raw_path_idx'] = p_i
+                    branches_to_add.append(branch_dict)
+                else:
+                    if self._verbose > 0:
+                        if self.compute_path_length(path) < self._min_path_length:
+                            print(f"Removed path {p_i} for minimum path length: {self.compute_path_length(path)}um")
+                        elif len(path) < self._min_path_points:
+                            print(f"Removed path {p_i} for minimum path points: {len(path)} points")
+        else:
+            if self._verbose > 0:
+                print(f"No points remaining for paht {p_i}")
+
+        return branches_to_add
+
     def robust_velocity_estimator(self, path, peaks, dists, remove_outliers):
         velocity, offset, r_value, p_value, std_err = linregress(peaks, dists)
         r2 = r_value ** 2
         path_clean = path
-        if remove_outliers and self._mad_threshold:
+        inlier_mask = None
+        if remove_outliers and self._mad_threshold and r2 < self._r2_threshold_for_outliers:
             theil = linear_model.TheilSenRegressor(max_iter=self._theilsen_maxiter)
             theil.fit(peaks.reshape(-1, 1), dists)
 
             dists_pred = theil.predict(peaks.reshape(-1, 1))
+
+            # TODO: use velocity * x + (offset +- inercept_error ~ 30)
+
             errors = np.abs(dists - dists_pred)
 
-            # remove points +- 5 MAD
+            # remove points +- thresh * MAD
             mad = median_abs_deviation(errors)
-            inlier_mask = np.where(np.abs(errors - np.median(errors)) < self._mad_threshold * mad)[0]
+            outlier_idxs = np.where((np.abs(errors - np.median(errors)) > self._mad_threshold * mad) &
+                                    (errors > self._min_outlier_tracking_error))
+
+            inlier_mask = np.array([True] * len(path))
+            inlier_mask[outlier_idxs] = False
 
             path_clean = np.array(path_clean)[inlier_mask]
 
@@ -845,10 +827,10 @@ class GraphAxonTracking(AxonTracking):
                 velocity, offset, r_value, p_value, std_err = linregress(peaks, dists)
                 r2 = r_value ** 2
             else:
-                path_clean, velocity, offset, r2, p_value, std_err, dists, peaks \
+                path_clean, velocity, offset, r2, p_value, dists, peaks, inlier_mask \
                     = None, None, None, None, None, None, None, None
 
-        return path_clean, velocity, offset, r2, p_value, std_err, dists, peaks
+        return path_clean, velocity, offset, r2, p_value, dists, peaks, inlier_mask
 
     def plot_graph(self, fig=None, cmap_nodes='viridis', cmap_edges='rainbow', node_search_labels=False):
         if fig is None:
@@ -899,12 +881,12 @@ class GraphAxonTracking(AxonTracking):
         cm = plt.get_cmap(cmap)
 
         ax_all.set_title(f"All branches {len(self._paths_raw)}")
-        plot_template(self.template, self.locations, colors='gray', alpha=0.3, vscale=self._vscale, ax=ax_all,
-                      pitch=pitch)
-        plot_template(self.template, self.locations, colors='k', channels=self.selected_channels,
-                      vscale=self._vscale, ax=ax_all, pitch=pitch)
-        plot_template(self.template, self.locations, colors='r', channels=[self.init_channel],
-                      vscale=self._vscale, ax=ax_all, pitch=pitch)
+        ax_all.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="",
+                    alpha=0.1)
+        ax_all.plot(self.locations[self.selected_channels, 0],
+                    self.locations[self.selected_channels, 1], marker=".", color="k", ls="", alpha=0.2)
+        ax_all.plot(*self.locations[self.init_channel], marker="o", color="r", ls="", alpha=0.5, zorder=10)
+        ax_all.axis("off")
 
         branch_colors = []
         for i, path in enumerate(self._paths_raw):
@@ -914,12 +896,12 @@ class GraphAxonTracking(AxonTracking):
                         color=color)
 
         ax_clean.set_title(f"Clean branches {len(self._paths_clean)}")
-        plot_template(self.template, self.locations, colors='gray', alpha=0.3, vscale=self._vscale, ax=ax_clean,
-                      pitch=pitch)
-        plot_template(self.template, self.locations, colors='k', channels=self.selected_channels,
-                      vscale=self._vscale, ax=ax_clean, pitch=pitch)
-        plot_template(self.template, self.locations, colors='r', channels=[self.init_channel],
-                      vscale=self._vscale, ax=ax_clean, pitch=pitch)
+        ax_clean.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="",
+                      alpha=0.1)
+        ax_clean.plot(self.locations[self.selected_channels, 0],
+                    self.locations[self.selected_channels, 1], marker=".", color="k", ls="", alpha=0.2)
+        ax_clean.plot(*self.locations[self.init_channel], marker="o", color="r", ls="", alpha=0.5, zorder=10)
+        ax_clean.axis("off")
 
         for i, branch in enumerate(self.branches):
             path = branch['channels']
@@ -931,7 +913,8 @@ class GraphAxonTracking(AxonTracking):
 
         return fig
 
-    def _plot_raw_branches(self, plot_full_template=False, ax=None, cmap="rainbow", pitch=None):
+    def plot_raw_branches(self, plot_full_template=False, ax=None, cmap="rainbow", pitch=None,
+                          plot_bp=False, plot_neighbors=False):
         if ax is None:
             fig, ax_raw = plt.subplots()
         else:
@@ -939,22 +922,33 @@ class GraphAxonTracking(AxonTracking):
         cm = plt.get_cmap(cmap)
 
         if plot_full_template:
-            plot_template(self.template, self.locations, colors='gray', alpha=0.3, vscale=self._vscale, ax=ax_raw,
-                          pitch=pitch)
-        plot_template(self.template, self.locations, colors='k', channels=self.selected_channels,
-                      vscale=self._vscale, ax=ax_raw, pitch=pitch)
-        plot_template(self.template, self.locations, colors='r', channels=[self.init_channel],
-                      vscale=self._vscale, ax=ax_raw, pitch=pitch)
+            ax_raw.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="",
+                        alpha=0.1)
+
+        ax_raw.plot(self.locations[self.selected_channels, 0],
+                    self.locations[self.selected_channels, 1], marker=".", color="k", ls="", alpha=0.2)
 
         branch_colors = []
         for i, path in enumerate(self._paths_raw):
             color = cm(i / len(self._paths_raw))
             branch_colors.append(color)
+
+            if plot_neighbors:
+                ax_raw.plot(self.locations[self._path_neighbors[i], 0], self.locations[self._path_neighbors[i], 1],
+                            marker='.', ls='', color=color, alpha=0.1)
             ax_raw.plot(self.locations[path, 0], self.locations[path, 1], marker='o', ls='-',
-                        color=color)
+                        color=color, markeredgecolor="k", label=f"Raw branch {i}")
+        if plot_bp:
+            for bp in self._branching_points:
+                ax_raw.plot(*self.locations[bp], marker='o', color="y", zorder=2, markersize=10, ls="",
+                            markeredgecolor="k", label="Branching points")
+        ax_raw.axis("off")
+        ax_raw.axis("equal")
+
         return ax_raw
 
-    def plot_clean_branches(self, plot_full_template=False, ax=None, cmap="rainbow", pitch=None):
+    def plot_clean_branches(self, plot_full_template=False, ax=None, cmap="rainbow", pitch=None,
+                            plot_bp=False):
         if ax is None:
             fig, ax_clean = plt.subplots()
         else:
@@ -966,18 +960,20 @@ class GraphAxonTracking(AxonTracking):
             color = cm(i / len(self._paths_raw))
             branch_colors.append(color)
         if plot_full_template:
-            plot_template(self.template, self.locations, colors='gray', alpha=0.3, vscale=self._vscale, ax=ax_clean,
-                          pitch=pitch)
-        plot_template(self.template, self.locations, colors='k', channels=self.selected_channels,
-                      vscale=self._vscale, ax=ax_clean, pitch=pitch)
-        plot_template(self.template, self.locations, colors='r', channels=[self.init_channel],
-                      vscale=self._vscale, ax=ax_clean, pitch=pitch)
+            ax_clean.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="",
+                          alpha=0.1)
+
+        ax_clean.plot(self.locations[self.selected_channels, 0],
+                      self.locations[self.selected_channels, 1], marker=".", color="k", ls="", alpha=0.2)
 
         for i, branch in enumerate(self.branches):
-            path = branch['channels']
-            color = branch_colors[branch['raw_path_idx']]
-            ax_clean.plot(self.locations[path, 0], self.locations[path, 1], marker='o', ls='-',
-                          color=color)
+                path = branch['channels']
+                color = branch_colors[branch['raw_path_idx']]
+                ax_clean.plot(self.locations[path, 0], self.locations[path, 1], marker='o', ls='-',
+                              color=color, markeredgecolor="k", label=f"Clean branch {i}")
+        if plot_bp:
+            for bp in self._branching_points:
+                ax_clean.plot(*self.locations[bp], marker='o', color="y", zorder=2, markersize=10, ls="")
         return ax_clean
 
     def _plot_nodes(self, cmap_nodes="viridis", node_searched_labels=False,
@@ -1057,7 +1053,7 @@ class GraphAxonTracking(AxonTracking):
         else:
             return False
 
-    def plot_velocities(self, fig=None, cmap='rainbow'):
+    def plot_velocities(self, fig=None, plot_outliers=False, cmap='rainbow'):
         if fig is None:
             fig = plt.figure()
         ax_vel = fig.add_subplot(111)
@@ -1069,11 +1065,28 @@ class GraphAxonTracking(AxonTracking):
             color = cm(i / len(self._paths_raw))
             branch_colors.append(color)
 
-        for i, branch in enumerate(self.branches):
-            color = branch_colors[branch['raw_path_idx']]
-            plot_velocity(np.array(branch['peak_times']), np.array(branch['distances']),
-                          branch['velocity'], branch['offset'], color=color, r2=branch['r2'],
-                          ax=ax_vel)
+        if plot_outliers:
+            for i, branch in enumerate(self.branches):
+                color = branch_colors[branch['raw_path_idx']]
+                raw_idx = branch['raw_path_idx']
+                path = self._paths_raw[raw_idx][::-1][1:]
+
+                peaks, dists = self._estimate_peaks_and_dists(path)
+                path_clean, velocity, offset, r2, p_value, dists_clean, peaks_clean, inlier_mask \
+                    = self.robust_velocity_estimator(path, peaks, dists, True)
+                ax_vel.plot(peaks_clean, dists_clean, marker='o', ls='', color=color, alpha=0.3)
+                outlier_idxs = np.where(inlier_mask == False)
+                plot_velocity(peaks[inlier_mask], dists[inlier_mask],
+                              velocity, offset, color=color, r2=r2,
+                              ax=ax_vel, markeredgecolor="k", alpha_markers=0.5, lw=2)
+                ax_vel.plot(peaks[outlier_idxs], dists[outlier_idxs], marker='d', ls='', color=color, alpha=1,
+                            markersize=10, markeredgecolor="k", zorder=10)
+        else:
+            for i, branch in enumerate(self.branches):
+                color = branch_colors[branch['raw_path_idx']]
+                plot_velocity(np.array(branch['peak_times']), np.array(branch['distances']),
+                              branch['velocity'], branch['offset'], color=color, r2=branch['r2'],
+                              ax=ax_vel)
 
         ax_vel.spines['top'].set_visible(False)
         ax_vel.spines['right'].set_visible(False)
@@ -1128,30 +1141,25 @@ class GraphAxonTracking(AxonTracking):
                                           for loc in self.locations[channels_earlier]])
             dist_from_init = np.linalg.norm(self.locations[node] - self.locations[self.init_channel])
 
-            if self._neighbor_selection == "dist":
-                neighbor_idxs = np.argsort(distances_earlier)[:int(self._n_neighbors)]
+            # select 2*n_neigbors based on distance and amplitude
+            neighbor_idxs = np.argsort(distances_earlier)[:int(2 * self._n_neighbors)]
+
+            distance_neighbors = distances_earlier[neighbor_idxs]
+            amps_neighbors = amplitudes_earlier[neighbor_idxs]
+
+            if len(distance_neighbors) > 1:
+            # combine dist and amp
+                dist_neighbors_norm = (distance_neighbors - np.min(distance_neighbors)) / np.ptp(distance_neighbors)
+                amps_neighbors_norm = 1 - (amps_neighbors - np.min(amps_neighbors)) / np.ptp(amps_neighbors)
+
+                heur_neighbors = self._edge_dist_amp_ratio * dist_neighbors_norm + \
+                                 (1 - self._edge_dist_amp_ratio) * amps_neighbors_norm
+                neighbor_max_heur_idxs = np.argsort(heur_neighbors)[:self._n_neighbors]
+                distances_earlier_sorted = distances_earlier[neighbor_idxs][neighbor_max_heur_idxs]
+                channels_sorted = channels_earlier[neighbor_idxs][neighbor_max_heur_idxs]
+            else:
                 channels_sorted = channels_earlier[neighbor_idxs]
-                distances_earlier_sorted = distances_earlier[neighbor_idxs]
-            elif self._neighbor_selection == "amp":
-                # select 2*n_neigbors based on distance and amplitude
-                neighbor_idxs = np.argsort(distances_earlier)[:int(2 * self._n_neighbors)]
-
-                distance_neighbors = distances_earlier[neighbor_idxs]
-                amps_neighbors = amplitudes_earlier[neighbor_idxs]
-
-                if len(distance_neighbors) > 1:
-                # combine dist and amp
-                    dist_neighbors_norm = (distance_neighbors - np.min(distance_neighbors)) / np.ptp(distance_neighbors)
-                    amps_neighbors_norm = 1 - (amps_neighbors - np.min(amps_neighbors)) / np.ptp(amps_neighbors)
-
-                    heur_neighbors = self._edge_dist_amp_ratio * dist_neighbors_norm + \
-                                     (1 - self._edge_dist_amp_ratio) * amps_neighbors_norm
-                    neighbor_max_heur_idxs = np.argsort(heur_neighbors)[:self._n_neighbors]
-                    distances_earlier_sorted = distances_earlier[neighbor_idxs][neighbor_max_heur_idxs]
-                    channels_sorted = channels_earlier[neighbor_idxs][neighbor_max_heur_idxs]
-                else:
-                    channels_sorted = channels_earlier[neighbor_idxs]
-                    distances_earlier_sorted = distance_neighbors
+                distances_earlier_sorted = distance_neighbors
 
 
             # remove dist farther than max_distance

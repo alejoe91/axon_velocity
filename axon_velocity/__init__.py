@@ -1,7 +1,5 @@
-from .axon_velocity import compute_graph_propagation_velocity, compute_simple_propagation_velocity, \
-    get_default_graph_velocity_params, get_default_simple_velocity_params
-
-from .tracking_classes import GraphAxonTracking, SimpleAxonTracking
+from .axon_velocity import compute_graph_propagation_velocity,  get_default_graph_velocity_params
+from .tracking_classes import GraphAxonTracking
 
 from .tools import compute_axon_velocity_on_branches, compute_peak_time_stds
 

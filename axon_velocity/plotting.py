@@ -51,24 +51,26 @@ def plot_branch_velocities(branches, ax=None, cmap='rainbow', alpha_marker=0.7, 
     return ax
 
 
-def plot_velocity(peak_times, distances, velocity, offset, color=None, r2=None, ax=None):
+def plot_velocity(peak_times, distances, velocity, offset, color=None, r2=None, ax=None,
+                  extend_line=0.2, alpha_markers=0.3, alpha_line=0.8, lw=1, fs=15, **kwargs):
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111)
     if color is None:
         color = 'C0'
 
-    ax.plot(peak_times, distances, marker='o', ls='', color=color, alpha=0.3)
-    xs = np.array([np.min(peak_times), np.max(peak_times)])
+    ax.plot(peak_times, distances, marker='o', ls='', color=color, alpha=alpha_markers, **kwargs)
+    pt_ptp = np.ptp(peak_times)
+    xs = np.array([np.min(peak_times) - extend_line * pt_ptp, np.max(peak_times) + extend_line * pt_ptp])
     ys = velocity * xs + offset
     if r2 is not None:
         label = f"velocity: {np.round(velocity, 3)} mm/s\nr2: {np.round(r2, 3)}"
     else:
         label = f"velocity: {np.round(velocity, 3)} mm/s"
-    ax.plot(xs, ys, ls='--', color=color, alpha=0.8, label=label)
-    ax.set_xlabel("Peak time (ms)", fontsize=15)
-    ax.set_ylabel("Distance ($\mu$m)", fontsize=15)
-    ax.legend()
+    ax.plot(xs, ys, ls='--', color=color, alpha=alpha_line, label=label, lw=lw)
+    ax.set_xlabel("Peak time (ms)", fontsize=fs)
+    ax.set_ylabel("Distance ($\mu$m)", fontsize=fs)
+    ax.legend(fontsize=fs)
     return ax
 
 
@@ -120,7 +122,7 @@ def plot_peak_latency_map(template, locations, fs, cmap='viridis', log=False,
 
     temp_map = np.abs(np.argmin(template, axis=1)).astype('float')
     temp_map = temp_map / fs * 1000
-    probe = _get_probe(locations, elec_size)
+    probe = get_probe(locations, elec_size)
     ax, im = _plot_image(temp_map, probe, log=log, alpha=alpha, cmap=cmap, ax=ax, **to_image_kwargs)
 
     if colorbar:
@@ -152,7 +154,7 @@ def plot_amplitude_map(template, locations, cmap='viridis', log=False,
         fig = ax.get_figure()
 
     temp_map = np.max(np.abs(template), axis=1)
-    probe = _get_probe(locations, elec_size)
+    probe = get_probe(locations, elec_size)
     ax, im = _plot_image(temp_map, probe, log=log, alpha=alpha, cmap=cmap, ax=ax, **to_image_kwargs)
 
     if colorbar:
@@ -181,7 +183,7 @@ def plot_peak_std_map(template, locations, cmap='viridis', neighbor_distance=30,
     peak_time_stds = compute_peak_time_stds(template, locations, neighbor_distance)
     temp_map = peak_time_stds
 
-    probe = _get_probe(locations, elec_size)
+    probe = get_probe(locations, elec_size)
     ax, im = _plot_image(temp_map, probe, log=log, alpha=alpha, cmap=cmap, ax=ax, **to_image_kwargs)
 
     return ax
@@ -201,7 +203,7 @@ def play_template_map(template, locations, gtr=None, elec_size=8, cmap='viridis'
         for br in gtr.branches:
             ax.plot(gtr.locations[br["channels"], 0], gtr.locations[br["channels"], 1], color="k", alpha=0.2)
 
-    probe = _get_probe(locations, elec_size)
+    probe = get_probe(locations, elec_size)
 
     if log:
         min_value = np.min(template).copy()
@@ -361,6 +363,32 @@ def plot_axon_summary(gtr, ax=None, fig=None, figsize=(10, 7),
     return fig, axes
 
 
+def get_probe(locations, width=10):
+    """
+    Returns a probeinterface probe with swuare electrodes.
+
+    Parameters
+    ----------
+    locations: np.array
+        Locations of electrodes
+    width: float
+        Width of electrodes (default=10)
+
+    Returns
+    -------
+    print: probeinterface.Probe
+        The probe object
+    """
+    shapes = "square"
+    shape_params = {'width': width}
+
+    probe = pi.Probe(ndim=2, si_units='um')
+    probe.set_contacts(positions=locations,
+                       shapes=shapes, shape_params=shape_params)
+    probe.create_auto_shape(probe_type="rect")
+    return probe
+
+
 def _get_image(values, probe, log, compress, min_value=None, **to_image_kwargs):
     if log:
         if min_value is None:
@@ -385,13 +413,3 @@ def _plot_image(values, probe, log=False, compress=False, cmap="viridis", alpha=
 
     return ax, im
 
-
-def _get_probe(locations, width=10):
-    shapes = "square"
-    shape_params = {'width': width}
-
-    probe = pi.Probe(ndim=2, si_units='um')
-    probe.set_contacts(positions=locations,
-                       shapes=shapes, shape_params=shape_params)
-    probe.create_auto_shape(probe_type="rect")
-    return probe
