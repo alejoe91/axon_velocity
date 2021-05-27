@@ -1,22 +1,22 @@
 import numpy as np
-from scipy.stats import linregress, kurtosis
-from scipy.signal import resample_poly
-from scipy.stats import pearsonr, median_abs_deviation
-from sklearn import linear_model
-
-import pandas as pd
-from statsmodels.formula.api import ols
-
+from copy import deepcopy
 import matplotlib.pylab as plt
 import networkx as nx
 from matplotlib import gridspec
 import matplotlib as mpl
 
-from .plotting import plot_template, plot_velocity
+from scipy.stats import linregress, kurtosis, median_abs_deviation
+from scipy.signal import resample_poly
+from sklearn import linear_model
+
+from .plotting import plot_velocity
 from .tools import distance_numpy
 
 
 class AxonTracking:
+    """
+    Base class to handle channel selection.
+    """
     def __init__(self, template, locations, fs, upsample=1, init_delay=0,
                  detect_threshold=0.1, kurt_threshold=0.3, peak_std_threshold=1, peak_std_distance=30,
                  detection_type="relative", remove_isolated=True, min_selected_points=30, min_path_length=100,
@@ -72,6 +72,10 @@ class AxonTracking:
 
     def select_channels(self, init_delay=None, detect_threshold=None,
                         kurt_threshold=None, remove_isolated=None, neighbor_distance=50):
+        """
+        Selects channels based on: detection threshold, kurtosis, peak time std, initial delay.
+        Optionally removes isolated channels.
+        """
         self.selected_channels = np.arange(len(self.locations))
         if init_delay is not None:
             self._init_frames = np.round(init_delay / 1e3 * self.fs).astype(int)
@@ -307,13 +311,22 @@ class GraphAxonTracking(AxonTracking):
 
         self._node_heuristic = None
         self._selected_channels_sorted = None
+        self._max_dist_node = None
+        self._min_dist_node = None
         self._removed_neighbors = None
         self._paths_raw = None
         self._paths_clean = None
         self._paths_clean_idxs = None
         self._path_avg_heuristic = None
-        self._nodes_searched = []
-        self._full_paths = []
+        self._path_neighbors = None
+        self._branching_points = None
+        self._nodes_searched = None
+        self._full_paths = None
+
+        self._paths_pruned = None
+        self._snap_channels = None
+        self._paths_raw_original = None
+        self._branching_points_original = None
 
         self.graph = None
 
@@ -326,6 +339,9 @@ class GraphAxonTracking(AxonTracking):
 
     def build_graph(self, init_amp_peak_ratio=None, n_neighbors=None, max_distance_for_edge=None,
                     neighbor_selection=None):
+        """
+        Builds graph from selected channels.
+        """
         if self.compute_velocity:
             if init_amp_peak_ratio is not None:
                 self._init_amp_peak_ratio = init_amp_peak_ratio
@@ -337,7 +353,7 @@ class GraphAxonTracking(AxonTracking):
                 assert neighbor_selection in ["dist", "amp"]
                 self._neighbor_selection = neighbor_selection
 
-            # use both peak time and amplitude to sort channels
+            # Sort channels based on heuristic_node (weighted average of peak latency and amplitude)
             peak_times_init = self.peak_times[self.selected_channels] - self.peak_times[self.init_channel]
             amp_init = np.log10(self.amplitudes[self.selected_channels])
             peak_times_init_norm = (peak_times_init - np.min(peak_times_init)) / np.ptp(peak_times_init)
@@ -384,7 +400,7 @@ class GraphAxonTracking(AxonTracking):
                 print(f'Added {len(graph.edges)} edges')
                 print(f'{edges_to_init} connected to init channel')
 
-            # Compute and add edge heuristic
+            # Compute and add heuristic_edge
             all_peaks = []
             all_dists = []
             all_amps = []
@@ -415,7 +431,9 @@ class GraphAxonTracking(AxonTracking):
 
     def find_paths(self, min_path_length=None, min_path_points=None, neighbor_radius=None, distance_exp=None,
                    include_source=True, merging=True, pruning=True):
-        from copy import deepcopy
+        """
+        Finds raw paths by interrogating the graph.
+        """
         if self.compute_velocity:
             if min_path_length is not None:
                 self._min_path_length = min_path_length
@@ -437,22 +455,22 @@ class GraphAxonTracking(AxonTracking):
             init_path_ = []
             self._snap_channels = []
 
+            # Loop through all nodes
             for source_node in list(all_nodes):
-                # check if source node is a local maximum in the h_node space
+                # Check if source node is a local maximum in the h_node space
                 adj_chans = self._get_adjacent_channels(source_node, distance_thresh=self._neighbor_radius)
                 h_init_neigh = np.array([self.graph.nodes[adj]['h_init'] for adj in adj_chans])
-                # if not, continue
+                # If not, continue
                 if np.any(h_init_neigh > self.graph.nodes[source_node]['h_init']):
                     continue
                 if source_node == target_node:
                     continue
-
                 init_path_.append(source_node)
 
-                # if node is not in black list
+                # If node is not in black list
                 if source_node in self.graph.nodes and source_node not in self._removed_neighbors and \
                         source_node != self.init_channel:
-                    # check if there is a path to target
+                    # Check if there is a path to target
                     if nx.has_path(self.graph, source_node, target_node):
                         path = nx.astar_path(self.graph, source_node, target_node, heuristic=self._graph_dist,
                                              weight='heur')
@@ -460,18 +478,17 @@ class GraphAxonTracking(AxonTracking):
                                 path.remove(target_node)
                         i += 1
 
-                        # remove nodes which are already part of other paths (excluding source nodes)
                         full_path = path
                         self._full_paths.append(deepcopy(full_path))
 
-                        # remove channels when a branch is found
+                        # Remove nodes which are already part of other paths (excluding source nodes)
                         snap_channel = None
                         for adj_p_i, adj_nodes in enumerate(self._path_neighbors):
                             for p_i, p in enumerate(path):
                                 if p in adj_nodes:
                                     for p1 in path[p_i:]:
                                         path.remove(p1)
-                                    # add closes path in parent path
+                                    # Add closes path in parent path (snap_channel)
                                     dist_to_parent = np.array([np.linalg.norm(self.locations[p] - self.locations[op])
                                                                for op in paths[adj_p_i]])
                                     snap_channel = paths[adj_p_i][np.argmin(dist_to_parent)]
@@ -479,18 +496,20 @@ class GraphAxonTracking(AxonTracking):
                                     break
 
                         if len(path) > 0:
-                            # if conditions are satisfied: accept path
+                            # Extend path to include all channels along the path closer than 5um
                             path = self.get_full_path(path, 5)
+
+                            # If conditions are satisfied, accept path
                             if self._is_path_valid(path):
                                 paths.append(path)
 
+                                # Update branching points
                                 if snap_channel is not None:
                                     self._snap_channels.append(snap_channel)
                                     if snap_channel not in self._branching_points:
                                         self._branching_points.append(snap_channel)
-
+                                # Update neighbor nodes
                                 all_neighbors = self.get_full_path(path, min_dist=self._neighbor_radius)
-                                # print(f"Len neigh channels {len(self._removed_neighbors)}")
                                 self._path_neighbors.append(all_neighbors)
                                 self._removed_neighbors.extend(all_neighbors)
                             else:
@@ -514,14 +533,15 @@ class GraphAxonTracking(AxonTracking):
             self._paths_raw_original = deepcopy(paths)
             self._branching_points_original = deepcopy(self._branching_points)
 
-            # prune and merge based on branching point
+            # Prune and merge based on branching point
             if self._verbose > 0:
                 print("Pruning")
             merge_paths = []
             branch_points_to_remove = []
             paths_sharing_single_bp = {}
+
             for i_b, bp in enumerate(self._branching_points):
-                # find paths with branching point
+                # Find paths with branching point
                 paths_with_bp_idxs = [p_i for p_i, path in enumerate(paths) if bp in path]
                 if len(paths_with_bp_idxs) == 2:
                     paths_sharing_single_bp[bp] = paths_with_bp_idxs
@@ -534,6 +554,7 @@ class GraphAxonTracking(AxonTracking):
                         if bp_other != bp:
                             if bp_other in path_after_bp:
                                 has_other_bp = True
+                    # If left path after branching point is too short, remove it
                     if self._min_points_after_branching > len(path_after_bp) > 0:
                         if not has_other_bp:
                             if self._verbose > 0:
@@ -546,6 +567,7 @@ class GraphAxonTracking(AxonTracking):
                                 print(f"Not removing channels from {path_with_bp_i} because it contains "
                                       f"branching points")
 
+            # Find paths that need to be merged
             for bp, paths_with_bp_idxs in paths_sharing_single_bp.items():
                 path_with_bp_1 = paths[paths_with_bp_idxs[0]]
                 path_with_bp_2 = paths[paths_with_bp_idxs[1]]
@@ -584,6 +606,7 @@ class GraphAxonTracking(AxonTracking):
             self._paths_pruned = deepcopy(paths)
             paths_merged = deepcopy(paths)
 
+            # Merge paths
             if merging:
                 if len(merge_paths) > 0:
                     for merge_idxs in merge_paths:
@@ -619,7 +642,9 @@ class GraphAxonTracking(AxonTracking):
             raise Exception("Not enough channels selected to compute velocity")
 
     def clean_paths(self, r2_threshold=None, mad_threshold=None, remove_outliers=True):
-        # Sort based on length
+        """
+        Cleans up raw paths and saves branches structure.
+        """
         if self.compute_velocity:
             if r2_threshold is not None:
                 self._r2_threshold = r2_threshold
@@ -629,13 +654,14 @@ class GraphAxonTracking(AxonTracking):
             for path in self._paths_raw:
                 path_lengths.append(self.compute_path_length(path))
 
-            # create branches to add
+            # Create branches to add
             branches = []
             self._paths_clean = []
             for p_i, path in enumerate(self._paths_raw):
-                # try splitting paths
+                # Try splitting paths to find better fits
                 branches_to_add = self.split_paths(path, p_i, remove_outliers)
 
+                # Add branches if pass r2 threshold
                 for branch in branches_to_add:
                     add_branch = False
                     if self._r2_threshold is None:
@@ -646,7 +672,6 @@ class GraphAxonTracking(AxonTracking):
                         if self._verbose > 0:
                             print(f"Branch {p_i} removed for low R2: {branch['r2']}")
                     if add_branch:
-                        # for path_to_add in paths_to_add:
                         self._paths_clean.append(branch['channels'])
                         branches.append(branch)
 
@@ -661,6 +686,7 @@ class GraphAxonTracking(AxonTracking):
             raise Exception("Not enough channels selected to compute velocity")
 
     def compute_path_length(self, path):
+        """Computes length of a path in um"""
         length = 0
         for p, node in enumerate(path[:-1]):
             node1 = self.graph.nodes[node]
@@ -672,22 +698,8 @@ class GraphAxonTracking(AxonTracking):
 
         return length
 
-    def _estimate_peaks_and_dists(self, path):
-        peaks = (self.peak_times[path] - self.peak_times[path[0]]) / self.fs * 1000
-        dists = []
-        cum_dist = 0
-        for i, p in enumerate(path):
-            if i == 0:
-                cum_dist += 0
-            else:
-                cum_dist += np.linalg.norm(self.locations[p] - self.locations[path[i - 1]])
-            dists.append(cum_dist)
-        peaks = np.array(peaks)
-        dists = np.array(dists)
-        return peaks, dists
-
     def split_paths(self, path, p_i, remove_outliers):
-        """This function tries to split paths into subpaths with a better linear fit"""
+        """Tries to split paths into subpaths with a better linear fit"""
         branches_to_add = []
         # skip branch point from computation and revert order
         path_rev = path[::-1][1:]
@@ -789,6 +801,7 @@ class GraphAxonTracking(AxonTracking):
         return branches_to_add
 
     def robust_velocity_estimator(self, path, peaks, dists, remove_outliers):
+        """Estimates path velocity with robust fit. Optionally, outliers are removed"""
         velocity, offset, r_value, p_value, std_err = linregress(peaks, dists)
         r2 = r_value ** 2
         path_clean = path
@@ -829,7 +842,9 @@ class GraphAxonTracking(AxonTracking):
 
         return path_clean, velocity, offset, r2, p_value, dists, peaks, inlier_mask
 
+    ### PLOTTING FUNCTIONS ###
     def plot_graph(self, fig=None, cmap_nodes='viridis', cmap_edges='rainbow', node_search_labels=False):
+        """Plots nodes and edges in the graph"""
         if fig is None:
             fig = plt.figure()
         gs = gridspec.GridSpec(20, 20)
@@ -869,7 +884,8 @@ class GraphAxonTracking(AxonTracking):
 
         return fig
 
-    def plot_branches(self, fig=None, cmap='rainbow', pitch=None):
+    def plot_branches(self, fig=None, cmap='rainbow'):
+        """Plots raw and clean branches"""
         if fig is None:
             fig = plt.figure()
         ax_all = fig.add_subplot(1, 2, 1)
@@ -910,8 +926,9 @@ class GraphAxonTracking(AxonTracking):
 
         return fig
 
-    def plot_raw_branches(self, plot_full_template=False, ax=None, cmap="rainbow", pitch=None,
+    def plot_raw_branches(self, plot_full_template=False, ax=None, cmap="rainbow",
                           plot_labels=False, plot_bp=False, plot_neighbors=False):
+        """Plots raw branches"""
         if ax is None:
             fig, ax_raw = plt.subplots()
         else:
@@ -947,8 +964,9 @@ class GraphAxonTracking(AxonTracking):
 
         return ax_raw
 
-    def plot_clean_branches(self, plot_full_template=False, ax=None, cmap="rainbow", pitch=None,
+    def plot_clean_branches(self, plot_full_template=False, ax=None, cmap="rainbow",
                             plot_bp=False):
+        """Plots clean branches"""
         if ax is None:
             fig, ax_clean = plt.subplots()
         else:
@@ -976,6 +994,48 @@ class GraphAxonTracking(AxonTracking):
                 ax_clean.plot(*self.locations[bp], marker='o', color="y", zorder=2, markersize=10, ls="")
         return ax_clean
 
+    def plot_velocities(self, fig=None, plot_outliers=False, cmap='rainbow'):
+        """Plots branch velocities"""
+        if fig is None:
+            fig = plt.figure()
+        ax_vel = fig.add_subplot(111)
+
+        cm = plt.get_cmap(cmap)
+
+        branch_colors = []
+        for i, path in enumerate(self._paths_raw):
+            color = cm(i / len(self._paths_raw))
+            branch_colors.append(color)
+
+        if plot_outliers:
+            for i, branch in enumerate(self.branches):
+                color = branch_colors[branch['raw_path_idx']]
+                raw_idx = branch['raw_path_idx']
+                path = self._paths_raw[raw_idx][::-1][1:]
+
+                peaks, dists = self._estimate_peaks_and_dists(path)
+                path_clean, velocity, offset, r2, p_value, dists_clean, peaks_clean, inlier_mask \
+                    = self.robust_velocity_estimator(path, peaks, dists, True)
+                ax_vel.plot(peaks_clean, dists_clean, marker='o', ls='', color=color, alpha=0.3)
+                outlier_idxs = np.where(inlier_mask == False)
+                plot_velocity(peaks[inlier_mask], dists[inlier_mask],
+                              velocity, offset, color=color, r2=r2,
+                              ax=ax_vel, markeredgecolor="k", alpha_markers=0.5, lw=2)
+                ax_vel.plot(peaks[outlier_idxs], dists[outlier_idxs], marker='d', ls='', color=color, alpha=1,
+                            markersize=10, markeredgecolor="k", zorder=10)
+        else:
+            for i, branch in enumerate(self.branches):
+                color = branch_colors[branch['raw_path_idx']]
+                plot_velocity(np.array(branch['peak_times']), np.array(branch['distances']),
+                              branch['velocity'], branch['offset'], color=color, r2=branch['r2'],
+                              ax=ax_vel)
+
+        ax_vel.spines['top'].set_visible(False)
+        ax_vel.spines['right'].set_visible(False)
+
+        return fig
+
+    ### HELPER FUNCTIONS ###
     def _plot_nodes(self, cmap_nodes="viridis", node_searched_labels=False,
                     color_by='heuristic', ax=None):
         if ax is None:
@@ -1053,45 +1113,19 @@ class GraphAxonTracking(AxonTracking):
         else:
             return False
 
-    def plot_velocities(self, fig=None, plot_outliers=False, cmap='rainbow'):
-        if fig is None:
-            fig = plt.figure()
-        ax_vel = fig.add_subplot(111)
-
-        cm = plt.get_cmap(cmap)
-
-        branch_colors = []
-        for i, path in enumerate(self._paths_raw):
-            color = cm(i / len(self._paths_raw))
-            branch_colors.append(color)
-
-        if plot_outliers:
-            for i, branch in enumerate(self.branches):
-                color = branch_colors[branch['raw_path_idx']]
-                raw_idx = branch['raw_path_idx']
-                path = self._paths_raw[raw_idx][::-1][1:]
-
-                peaks, dists = self._estimate_peaks_and_dists(path)
-                path_clean, velocity, offset, r2, p_value, dists_clean, peaks_clean, inlier_mask \
-                    = self.robust_velocity_estimator(path, peaks, dists, True)
-                ax_vel.plot(peaks_clean, dists_clean, marker='o', ls='', color=color, alpha=0.3)
-                outlier_idxs = np.where(inlier_mask == False)
-                plot_velocity(peaks[inlier_mask], dists[inlier_mask],
-                              velocity, offset, color=color, r2=r2,
-                              ax=ax_vel, markeredgecolor="k", alpha_markers=0.5, lw=2)
-                ax_vel.plot(peaks[outlier_idxs], dists[outlier_idxs], marker='d', ls='', color=color, alpha=1,
-                            markersize=10, markeredgecolor="k", zorder=10)
-        else:
-            for i, branch in enumerate(self.branches):
-                color = branch_colors[branch['raw_path_idx']]
-                plot_velocity(np.array(branch['peak_times']), np.array(branch['distances']),
-                              branch['velocity'], branch['offset'], color=color, r2=branch['r2'],
-                              ax=ax_vel)
-
-        ax_vel.spines['top'].set_visible(False)
-        ax_vel.spines['right'].set_visible(False)
-
-        return fig
+    def _estimate_peaks_and_dists(self, path):
+        peaks = (self.peak_times[path] - self.peak_times[path[0]]) / self.fs * 1000
+        dists = []
+        cum_dist = 0
+        for i, p in enumerate(path):
+            if i == 0:
+                cum_dist += 0
+            else:
+                cum_dist += np.linalg.norm(self.locations[p] - self.locations[path[i - 1]])
+            dists.append(cum_dist)
+        peaks = np.array(peaks)
+        dists = np.array(dists)
+        return peaks, dists
 
     def _graph_dist(self, n1, n2):
         node1 = self.graph.nodes[n1]
