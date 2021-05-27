@@ -450,6 +450,7 @@ class GraphAxonTracking(AxonTracking):
             self._removed_neighbors = []
             self._path_neighbors = []
             self._branching_points = []
+            self._full_paths = []
 
             i = 0
             init_path_ = []
