@@ -597,7 +597,7 @@ class GraphAxonTracking(AxonTracking):
                         for idx in np.argsort(median_latencies)[::-1]:
                             for p in paths[merge_idxs[idx]]:
                                 if p not in new_path:
-                                    new_path.extend(paths[merge_idxs[idx]])
+                                    new_path.append(p)
 
                         for mg in merge_idxs:
                             paths_merged.remove(paths[mg])
@@ -798,9 +798,6 @@ class GraphAxonTracking(AxonTracking):
             theil.fit(peaks.reshape(-1, 1), dists)
 
             dists_pred = theil.predict(peaks.reshape(-1, 1))
-
-            # TODO: use velocity * x + (offset +- inercept_error ~ 30)
-
             errors = np.abs(dists - dists_pred)
 
             # remove points +- thresh * MAD
@@ -818,7 +815,7 @@ class GraphAxonTracking(AxonTracking):
                 dists_path = np.array([np.linalg.norm(self.locations[p] - self.locations[pi]) for pi in path_clean
                                        if pi != p])
                 if np.all(dists_path > self._max_distance_for_edge):
-                    inlier_mask = np.delete(inlier_mask, np.where(path_clean == p))
+                    inlier_mask[np.where(path_clean == p)] = False
                     path_clean = np.delete(path_clean, np.where(path_clean == p))
 
             if len(inlier_mask) > 2:
@@ -914,7 +911,7 @@ class GraphAxonTracking(AxonTracking):
         return fig
 
     def plot_raw_branches(self, plot_full_template=False, ax=None, cmap="rainbow", pitch=None,
-                          plot_bp=False, plot_neighbors=False):
+                          plot_labels=False, plot_bp=False, plot_neighbors=False):
         if ax is None:
             fig, ax_raw = plt.subplots()
         else:
@@ -944,6 +941,9 @@ class GraphAxonTracking(AxonTracking):
                             markeredgecolor="k", label="Branching points")
         ax_raw.axis("off")
         ax_raw.axis("equal")
+
+        if plot_labels:
+            ax_raw.legend()
 
         return ax_raw
 
