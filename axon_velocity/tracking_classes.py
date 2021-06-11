@@ -746,6 +746,8 @@ class GraphAxonTracking(AxonTracking):
                                 if i_s == 0:
                                     # re append branch point
                                     subpath = np.array([path[-1]] + list(subpath))
+                                else:
+                                    subpath = np.array(subpath)
 
                                 if self._is_path_valid(subpath):
                                     branch_dict = {}
@@ -795,6 +797,18 @@ class GraphAxonTracking(AxonTracking):
                             print(f"Removed path {p_i} for minimum path length: {self.compute_path_length(path)}um")
                         elif len(path) < self._min_path_points:
                             print(f"Removed path {p_i} for minimum path points: {len(path)} points")
+                    # remove branching points
+                    for bp in self._branching_points:
+                        if bp in path:
+                            # compute degree
+                            bp_degree = 0
+                            for p in self._paths_raw:
+                                if bp in p:
+                                    bp_degree += 1
+                            if bp_degree == 2:
+                                self._branching_points.remove(bp)
+                                if self._verbose > 0:
+                                    print(f"Removing branching point {bp}")
         else:
             if self._verbose > 0:
                 print(f"No points remaining for paht {p_i}")
@@ -995,7 +1009,8 @@ class GraphAxonTracking(AxonTracking):
                 ax_clean.plot(*self.locations[bp], marker='o', color="y", zorder=2, markersize=10, ls="")
         return ax_clean
 
-    def plot_velocities(self, fig=None, plot_outliers=False, cmap='rainbow'):
+    def plot_velocities(self, fig=None, plot_outliers=False, cmap='rainbow', markersize=10, alpha=0.3,
+                        alpha_outliers=0.7, fs=15, lw=2, markersize_out=10):
         """Plots branch velocities"""
         if fig is None:
             fig = plt.figure()
@@ -1017,13 +1032,14 @@ class GraphAxonTracking(AxonTracking):
                 peaks, dists = self._estimate_peaks_and_dists(path)
                 path_clean, velocity, offset, r2, p_value, dists_clean, peaks_clean, inlier_mask \
                     = self.robust_velocity_estimator(path, peaks, dists, True)
-                ax_vel.plot(peaks_clean, dists_clean, marker='o', ls='', color=color, alpha=0.3)
+                # ax_vel.plot(peaks_clean, dists_clean, marker='o', ls='', color=color, alpha=alpha)
                 outlier_idxs = np.where(inlier_mask == False)
                 plot_velocity(peaks[inlier_mask], dists[inlier_mask],
                               velocity, offset, color=color, r2=r2,
-                              ax=ax_vel, markeredgecolor="k", alpha_markers=0.5, lw=2)
-                ax_vel.plot(peaks[outlier_idxs], dists[outlier_idxs], marker='d', ls='', color=color, alpha=1,
-                            markersize=10, markeredgecolor="k", zorder=10)
+                              ax=ax_vel, markeredgecolor="k", alpha_markers=alpha, lw=2, markersize=markersize,
+                              fs=fs, plot_markers=True)
+                ax_vel.plot(peaks[outlier_idxs], dists[outlier_idxs], marker='d', ls='', color=color,
+                            markersize=markersize_out, markeredgecolor="k", zorder=10, alpha=alpha_outliers)
         else:
             for i, branch in enumerate(self.branches):
                 color = branch_colors[branch['raw_path_idx']]
@@ -1069,8 +1085,8 @@ class GraphAxonTracking(AxonTracking):
 
         for node_searched in self._nodes_searched:
             ax_nodes.scatter([self.locations[node_searched, 0]], [self.locations[node_searched, 1]],
-                             marker='o', s=15, zorder=10,
-                             facecolor=None, edgecolor='r')
+                             marker='D', s=30, zorder=10,
+                             facecolor="y", edgecolor='k')
             if node_searched_labels:
                 ax_nodes.text(self.locations[node_searched, 0], self.locations[node_searched, 1], str(node_searched),
                               color='r')

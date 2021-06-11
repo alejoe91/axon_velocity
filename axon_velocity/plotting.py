@@ -52,21 +52,22 @@ def plot_branch_velocities(branches, ax=None, cmap='rainbow', alpha_marker=0.7, 
 
 
 def plot_velocity(peak_times, distances, velocity, offset, color=None, r2=None, ax=None,
-                  extend_line=0.2, alpha_markers=0.3, alpha_line=0.8, lw=1, fs=15, **kwargs):
+                  extend_line=0.2, alpha_markers=0.3, alpha_line=0.8, lw=1, fs=15, plot_markers=True, **kwargs):
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111)
     if color is None:
         color = 'C0'
 
-    ax.plot(peak_times, distances, marker='o', ls='', color=color, alpha=alpha_markers, **kwargs)
+    if plot_markers:
+        ax.plot(peak_times, distances, marker='o', ls='', color=color, alpha=alpha_markers, **kwargs)
     pt_ptp = np.ptp(peak_times)
     xs = np.array([np.min(peak_times) - extend_line * pt_ptp, np.max(peak_times) + extend_line * pt_ptp])
     ys = velocity * xs + offset
     if r2 is not None:
-        label = f"velocity: {np.round(velocity, 3)} mm/s\nr2: {np.round(r2, 3)}"
+        label = f"velocity: {np.round(velocity, 1)} mm/s\nr2: {np.round(r2, 2)}"
     else:
-        label = f"velocity: {np.round(velocity, 3)} mm/s"
+        label = f"velocity: {np.round(velocity, 1)} mm/s"
     ax.plot(xs, ys, ls='--', color=color, alpha=alpha_line, label=label, lw=lw)
     ax.set_xlabel("Peak time (ms)", fontsize=fs)
     ax.set_ylabel("Distance ($\mu$m)", fontsize=fs)
