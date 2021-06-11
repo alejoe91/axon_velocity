@@ -1,3 +1,5 @@
+[![PyPI version](https://badge.fury.io/py/axon-velocity.svg)](https://badge.fury.io/py/axon-velocity) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4896745.svg)](https://doi.org/10.5281/zenodo.4896745)
+
 # Axon velocity
 
 Graph-based algorithm to reconstruct axonal branches and compute velocities from extracellular 
