@@ -54,7 +54,7 @@ The graph-based method can be run as follows:
 ```python
 import axon_velocity as av
 
-gtr = av.compute_graph_propagation_velocity(template=your_template, locations=your_locations)
+gtr = av.compute_graph_propagation_velocity(template=your_template, locations=your_locations, fs=fs)
 ```
 
 To inspect available arguments, you can use `av.compute_graph_propagation_velocity?`. 
