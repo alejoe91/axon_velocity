@@ -53,8 +53,11 @@ class TestExtractors(unittest.TestCase):
     def test_plotting(self):
         av.plot_template(self.template_bifurcation, self.locations_bifurcation)
         av.plot_peak_latency_map(self.template_bifurcation, self.locations_bifurcation, self.fs)
+        av.plot_peak_latency_map(self.template_bifurcation, self.locations_bifurcation, self.fs, plot_image=False)
         av.plot_amplitude_map(self.template_bifurcation, self.locations_bifurcation)
-        av.plot_peak_std_map(self.template_bifurcation, self.locations_bifurcation)
+        av.plot_amplitude_map(self.template_bifurcation, self.locations_bifurcation, plot_image=False)
+        av.plot_peak_std_map(self.template_bifurcation, self.locations_bifurcation, self.fs)
+        av.plot_peak_std_map(self.template_bifurcation, self.locations_bifurcation, self.fs, plot_image=False)
         av.plot_branch_velocities(self.gtr_bif.branches)
         av.plot_axon_summary(self.gtr_bif)
         av.plot_branch_velocities(self.gtr_bif.branches)

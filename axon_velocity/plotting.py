@@ -4,6 +4,7 @@ import matplotlib as mpl
 import numpy as np
 import MEAutility as mu
 import probeinterface as pi
+from probeinterface import plotting
 from tqdm import tqdm
 
 from .tools import compute_peak_time_stds
@@ -114,7 +115,11 @@ def plot_template_propagation(template, locations, selected_channels, sort_templ
 
 def plot_peak_latency_map(template, locations, fs, cmap='viridis', log=False,
                           elec_size=8, alpha=0.9, ax=None, colorbar=False,
-                          colorbar_orientation="vertical", colorbar_shrink=0.5, **to_image_kwargs):
+                          colorbar_orientation="vertical", colorbar_shrink=0.5,
+                          plot_image=True, **to_image_kwargs):
+    """
+    Plots peak latency map for extracellular template
+    """
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -124,7 +129,8 @@ def plot_peak_latency_map(template, locations, fs, cmap='viridis', log=False,
     temp_map = np.abs(np.argmin(template, axis=1)).astype('float')
     temp_map = temp_map / fs * 1000
     probe = get_probe(locations, elec_size)
-    ax, im = _plot_image(temp_map, probe, log=log, alpha=alpha, cmap=cmap, ax=ax, **to_image_kwargs)
+    ax, im = _plot_image(temp_map, probe, log=log, alpha=alpha, cmap=cmap, ax=ax, plot_image=plot_image,
+                         **to_image_kwargs)
 
     if colorbar:
         if not log:
@@ -138,8 +144,6 @@ def plot_peak_latency_map(template, locations, fs, cmap='viridis', log=False,
                                 shrink=colorbar_shrink)
             cbar.set_ticks(ticks)
             cbar.set_ticklabels((np.round(np.min(temp_map)), np.round(np.max(temp_map))))
-        # cbar.set_label('Amplitude ($\mu$V)')
-        # cbar = fig.colorbar(im, orientation='horizontal', shrink=0.5)
         cbar.set_label('Latency (ms)')
 
     return ax
@@ -147,7 +151,11 @@ def plot_peak_latency_map(template, locations, fs, cmap='viridis', log=False,
 
 def plot_amplitude_map(template, locations, cmap='viridis', log=False,
                        elec_size=8, alpha=0.9, ax=None, colorbar=False,
-                       colorbar_orientation="vertical", colorbar_shrink=0.5, **to_image_kwargs):
+                       colorbar_orientation="vertical", colorbar_shrink=0.5,
+                       plot_image=True, **to_image_kwargs):
+    """
+    Plots amplitude map of extracellular template
+    """
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111)
@@ -156,7 +164,8 @@ def plot_amplitude_map(template, locations, cmap='viridis', log=False,
 
     temp_map = np.max(np.abs(template), axis=1)
     probe = get_probe(locations, elec_size)
-    ax, im = _plot_image(temp_map, probe, log=log, alpha=alpha, cmap=cmap, ax=ax, **to_image_kwargs)
+    ax, im = _plot_image(temp_map, probe, log=log, alpha=alpha, cmap=cmap, ax=ax, plot_image=plot_image,
+                         **to_image_kwargs)
 
     if colorbar:
         if not log:
@@ -175,23 +184,30 @@ def plot_amplitude_map(template, locations, cmap='viridis', log=False,
     return ax
 
 
-def plot_peak_std_map(template, locations, cmap='viridis', neighbor_distance=30, log=False,
-                      elec_size=8, alpha=0.9, ax=None, **to_image_kwargs):
+def plot_peak_std_map(template, locations, fs, cmap='viridis', neighbor_distance=30, log=False,
+                      elec_size=8, alpha=0.9, ax=None, plot_image=True, **to_image_kwargs):
+    """
+    Plots peak time standard deviation map
+    """
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111)
 
-    peak_time_stds = compute_peak_time_stds(template, locations, neighbor_distance)
+    peak_time_stds = compute_peak_time_stds(template, locations, fs, neighbor_distance)
     temp_map = peak_time_stds
 
     probe = get_probe(locations, elec_size)
-    ax, im = _plot_image(temp_map, probe, log=log, alpha=alpha, cmap=cmap, ax=ax, **to_image_kwargs)
+    ax, im = _plot_image(temp_map, probe, log=log, alpha=alpha, cmap=cmap, ax=ax, plot_image=plot_image,
+                         **to_image_kwargs)
 
     return ax
 
 
 def play_template_map(template, locations, gtr=None, elec_size=8, cmap='viridis', log=False, ax=None, skip_frames=1,
                       interval=10, **to_image_kwargs):
+    """
+    Plays animation of extracellular template
+    """
     from matplotlib import animation
 
     if ax is None:
@@ -261,18 +277,7 @@ def play_template_map(template, locations, gtr=None, elec_size=8, cmap='viridis'
 
 def plot_template(template, locations, channels=None, ax=None, pitch=None, **kwargs):
     """
-
-    Parameters
-    ----------
-    template
-    locations
-    channels
-    ax
-    kwargs
-
-    Returns
-    -------
-
+    Plots extracellular template
     """
     probe = mu.return_mea(info={'pos': locations, 'center': False, 'pitch': pitch})
     ax = mu.plot_mea_recording(template, probe, channels=channels, ax=ax, **kwargs)
@@ -390,26 +395,30 @@ def get_probe(locations, width=10):
     return probe
 
 
-def _get_image(values, probe, log, compress, min_value=None, **to_image_kwargs):
-    if log:
-        if min_value is None:
-            min_value = np.min(values)
-        values = np.log(values - min_value + 1)
-    if compress:
-        values = 1 / (1 + np.exp(-values))
-
+def _get_image(values, probe, **to_image_kwargs):
     img, xlims, ylims = probe.to_image(values, **to_image_kwargs)
 
     return img, xlims, ylims
 
 
-def _plot_image(values, probe, log=False, compress=False, cmap="viridis", alpha=1., ax=None, **to_image_kwargs):
+def _plot_image(values, probe, log=False, compress=False, cmap="viridis", alpha=1., ax=None,  plot_image=False,
+                **to_image_kwargs):
     if ax is None:
         fig, ax = plt.subplots()
 
-    img, xlims, ylims = _get_image(values, probe, log, compress, **to_image_kwargs)
+    if log:
+        min_value = np.min(values)
+        values = np.log(values - min_value + 1)
+    if compress:
+        values = 1 / (1 + np.exp(-values))
 
-    im = ax.imshow(img, extent=xlims + ylims, origin="lower", cmap=cmap, alpha=alpha)
+    if plot_image:
+        img, xlims, ylims = _get_image(values, probe, **to_image_kwargs)
+        im = ax.imshow(img, extent=xlims + ylims, origin="lower", cmap=cmap, alpha=alpha)
+    else:
+        probe_shape_kwargs = dict(facecolor='green', edgecolor='k', lw=0, alpha=0.0)
+        _ = plotting.plot_probe(probe, contacts_values=values, ax=ax, probe_shape_kwargs=probe_shape_kwargs)
+        im = None
     ax.axis("off")
 
     return ax, im
