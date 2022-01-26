@@ -133,17 +133,19 @@ def plot_peak_latency_map(template, locations, fs, cmap='viridis', log=False,
                          **to_image_kwargs)
 
     if colorbar:
-        if not log:
-            cbar = fig.colorbar(im, ax=ax, use_gridspec=True, orientation=colorbar_orientation,
+        if colorbar:
+            cbar = fig.colorbar(im,  ax=ax, use_gridspec=True, orientation=colorbar_orientation,
                                 shrink=colorbar_shrink)
-        else:
-            norm = mpl.colors.LogNorm(vmin=1e-5, vmax=1)
-            mappable = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
-            ticks = [1e-5, 1]
-            cbar = fig.colorbar(mappable,  ax=ax, use_gridspec=True, orientation=colorbar_orientation,
-                                shrink=colorbar_shrink)
+            max_value = np.max(temp_map)
+            ticks = np.arange(int(max_value + 1)).astype("int")
             cbar.set_ticks(ticks)
-            cbar.set_ticklabels((np.round(np.min(temp_map)), np.round(np.max(temp_map))))
+        if log:
+            min_value = np.min(temp_map)
+            max_value = np.max(temp_map)
+            ticks = np.arange(int(max_value + 1)).astype("int")
+            log_ticks = np.log(ticks - min_value + 1)
+            cbar.set_ticks(log_ticks)
+        cbar.set_ticklabels(ticks)
         cbar.set_label('Latency (ms)')
 
     return ax
@@ -168,17 +170,24 @@ def plot_amplitude_map(template, locations, cmap='viridis', log=False,
                          **to_image_kwargs)
 
     if colorbar:
-        if not log:
+        if colorbar:
             cbar = fig.colorbar(im,  ax=ax, use_gridspec=True, orientation=colorbar_orientation,
                                 shrink=colorbar_shrink)
-        else:
-            norm = mpl.colors.LogNorm(vmin=1e-5, vmax=1)
-            mappable = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
-            ticks = [1e-5, 1]
-            cbar = fig.colorbar(mappable,  ax=ax, use_gridspec=True, orientation=colorbar_orientation,
-                                shrink=colorbar_shrink)
-            cbar.set_ticks(ticks)
-            cbar.set_ticklabels((np.round(np.min(temp_map)), np.round(np.max(temp_map))))
+        if log:
+            min_value = np.min(temp_map)
+            max_value = np.max(temp_map)
+
+            max_exp = int(np.floor(np.log10(max_value)))
+
+            ticks = [10**i for i in range(max_exp + 1)]
+
+            if max_value - ticks[-1] > 30:
+                ticks = ticks + [np.round(max_value - 1)]
+            ticks = np.array(ticks).astype(int)
+
+            log_ticks = np.log(ticks - min_value + 1)
+            cbar.set_ticks(log_ticks)
+            cbar.set_ticklabels(ticks)
         cbar.set_label('Amplitude ($\mu$V)')
 
     return ax
@@ -416,10 +425,11 @@ def _plot_image(values, probe, log=False, compress=False, cmap="viridis", alpha=
         img, xlims, ylims = _get_image(values, probe, **to_image_kwargs)
         im = ax.imshow(img, extent=xlims + ylims, origin="lower", cmap=cmap, alpha=alpha)
     else:
-        probe_shape_kwargs = dict(facecolor='green', edgecolor='k', lw=0, alpha=0.0)
-        _ = plotting.plot_probe(probe, contacts_values=values, ax=ax, probe_shape_kwargs=probe_shape_kwargs)
+        probe_shape_kwargs = dict(facecolor='green', edgecolor="k", lw=0, alpha=0.0)
+        contacts_kargs = dict(edgecolor=None, lw=0)
+        _ = plotting.plot_probe(probe, contacts_values=values, ax=ax, probe_shape_kwargs=probe_shape_kwargs,
+                                contacts_kargs=contacts_kargs, cmap=cmap)
         im = None
     ax.axis("off")
 
     return ax, im
-
