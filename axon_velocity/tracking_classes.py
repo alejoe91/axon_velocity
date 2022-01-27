@@ -71,7 +71,7 @@ class AxonTracking:
         self._vscale = 1.5 * np.max(self.amplitudes)
 
     def select_channels(self, init_delay=None, detect_threshold=None,
-                        kurt_threshold=None, remove_isolated=None, neighbor_distance=50):
+                        kurt_threshold=None, remove_isolated=None, neighbor_distance=None):
         """
         Selects channels based on: detection threshold, kurtosis, peak time std, initial delay.
         Optionally removes isolated channels.
@@ -86,6 +86,8 @@ class AxonTracking:
         if remove_isolated is not None:
             assert isinstance(remove_isolated, bool), "'remove_isolated' must be a boolean"
             self._remove_isolated = remove_isolated
+        if neighbor_distance is None:
+            neighbor_distance = self._neighbor_radius
 
         if self._verbose > 0:
             print("Channel selection\n")
@@ -980,7 +982,7 @@ class GraphAxonTracking(AxonTracking):
         return ax_raw
 
     def plot_clean_branches(self, plot_full_template=False, ax=None, cmap="rainbow",
-                            plot_bp=False):
+                            plot_bp=False, branch_colors=None):
         """Plots clean branches"""
         if ax is None:
             fig, ax_clean = plt.subplots()
@@ -988,10 +990,16 @@ class GraphAxonTracking(AxonTracking):
             ax_clean = ax
         cm = plt.get_cmap(cmap)
 
-        branch_colors = []
-        for i, path in enumerate(self._paths_raw):
-            color = cm(i / len(self._paths_raw))
-            branch_colors.append(color)
+        if branch_colors is None:
+            colors = []
+            for i, path in enumerate(self._paths_raw):
+                color = cm(i / len(self._paths_raw))
+                colors.append(color)
+            branch_colors = []
+            for i, branch in enumerate(self.branches):
+                branch_colors.append(colors[branch['raw_path_idx']])
+        else:
+            assert len(branch_colors) >= len(self.branches), "'branch_colors' is too short!"
         if plot_full_template:
             ax_clean.plot(self.locations[:, 0], self.locations[:, 1], marker=".", color="grey", ls="",
                           alpha=0.1)
@@ -1000,10 +1008,10 @@ class GraphAxonTracking(AxonTracking):
                       self.locations[self.selected_channels, 1], marker=".", color="k", ls="", alpha=0.2)
 
         for i, branch in enumerate(self.branches):
-                path = branch['channels']
-                color = branch_colors[branch['raw_path_idx']]
-                ax_clean.plot(self.locations[path, 0], self.locations[path, 1], marker='o', ls='-',
-                              color=color, markeredgecolor="k", label=f"Clean branch {i}")
+            path = branch['channels']
+            color = branch_colors[i]
+            ax_clean.plot(self.locations[path, 0], self.locations[path, 1], marker='o', ls='-',
+                          color=color, markeredgecolor="k", label=f"Clean branch {i}")
         if plot_bp:
             for bp in self._branching_points:
                 ax_clean.plot(*self.locations[bp], marker='o', color="y", zorder=2, markersize=10, ls="")
