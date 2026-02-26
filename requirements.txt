@@ -1,7 +1,0 @@
-numpy
-matplotlib
-scipy
-networkx
-sklearn
-MEAutility
-probeinterface

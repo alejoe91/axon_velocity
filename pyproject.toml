@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "axon_velocity"
+version = "0.2.0"
+description = "Python package to reconstruct axonal branches from high-density micro-electrode array data"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Alessio Buccino", email = "alessiop.buccino@gmail.com" },
+]
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "scipy",
+    "networkx",
+    "scikit-learn",
+    "packaging",
+    "MEAutility",
+    "probeinterface",
+    "tqdm"
+]
+
+[project.optional-dependencies]
+full = [
+    "neuron",
+    "LFPy",
+    "neuroplotlib",
+]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+
+[project.urls]
+Homepage = "https://github.com/alejoe91/axon_velocity"
+Repository = "https://github.com/alejoe91/axon_velocity"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
