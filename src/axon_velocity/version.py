@@ -1,6 +1,4 @@
-from importlib.metadata import version as _get_version, PackageNotFoundError
+from importlib.metadata import version as _get_version
 
-try:
-    version = _get_version("axon_velocity")
-except PackageNotFoundError:
-    version = "0.1.2"
+version = _get_version("axon_velocity")
+

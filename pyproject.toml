@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "axon_velocity"
-version = "0.1.2"
+version = "0.2.0"
 description = "Python package to reconstruct axonal branches from high-density micro-electrode array data"
 readme = "README.md"
 license = { text = "MIT" }
@@ -38,7 +38,7 @@ full = [
     "LFPy",
     "neuroplotlib",
 ]
-dev = [
+test = [
     "pytest",
     "pytest-cov",
 ]
