@@ -30,6 +30,7 @@ dependencies = [
     "packaging",
     "MEAutility",
     "probeinterface",
+    "tqdm"
 ]
 
 [project.optional-dependencies]
