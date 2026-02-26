@@ -78,7 +78,25 @@ It contains the following fields:
 The `GraphAxonTracking` also implements useful methods for plotting the selected channels 
 (`gtr.plot_channel_selection()`), plot the underlying graph (`gtr.plot_graph()`), plot the selected axonal branches 
 (`gtr.plot_branches()`), and plot the estimated velocities for each branch (`gtr.plot_velocities()`).
-    
+
+
+## Cite
+
+If you use this package, please cite this paper: [An automated method for precise axon reconstruction from recordings of high-density micro-electrode arrays](https://doi.org/10.1088/1741-2552/ac59a2):
+
+```
+@article{buccino2022automated,
+  title={An automated method for precise axon reconstruction from recordings of high-density micro-electrode arrays},
+  author={Buccino, Alessio Paolo and Yuan, Xinyue and Emmenegger, Vishalini and Xue, Xiaohan and G{\"a}nswein, Tobias and Hierlemann, Andreas},
+  journal={Journal of neural engineering},
+  volume={19},
+  number={2},
+  pages={026026},
+  year={2022},
+  publisher={IOP Publishing}
+}
+```
+
   
 ## Contribute
 
