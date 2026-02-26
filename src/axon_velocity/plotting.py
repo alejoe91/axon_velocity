@@ -46,7 +46,7 @@ def plot_branch_velocities(branches, ax=None, cmap='rainbow', alpha_marker=0.7, 
                 label=f"vel.: {np.round(velocity)} mm/s\n"
                       f"$r^2$: {np.round(r2, 2)}")
         ax.set_xlabel("Peak time (ms)", fontsize=fontsize)
-        ax.set_ylabel("Distance ($\mu$m)", fontsize=fontsize)
+        ax.set_ylabel("Distance ($\\mu$m)", fontsize=fontsize)
         if legend:
             ax.legend()
     return ax
@@ -71,7 +71,7 @@ def plot_velocity(peak_times, distances, velocity, offset, color=None, r2=None, 
         label = f"velocity: {np.round(velocity, 1)} mm/s"
     ax.plot(xs, ys, ls='--', color=color, alpha=alpha_line, label=label, lw=lw)
     ax.set_xlabel("Peak time (ms)", fontsize=fs)
-    ax.set_ylabel("Distance ($\mu$m)", fontsize=fs)
+    ax.set_ylabel("Distance ($\\mu$m)", fontsize=fs)
     ax.legend(fontsize=fs)
     return ax
 
@@ -188,7 +188,7 @@ def plot_amplitude_map(template, locations, cmap='viridis', log=False,
             log_ticks = np.log(ticks - min_value + 1)
             cbar.set_ticks(log_ticks)
             cbar.set_ticklabels(ticks)
-        cbar.set_label('Amplitude ($\mu$V)')
+        cbar.set_label('Amplitude ($\\mu$V)')
 
     return ax
 
@@ -348,7 +348,7 @@ def plot_axon_summary(gtr, ax=None, fig=None, figsize=(10, 7),
     ax1.plot(init[0], init[1], marker='o', color='r', markersize=5)
     plot_peak_latency_map(template, locations, gtr.fs, ax=ax2)
     ax2.plot(init[0], init[1], marker='o', color='r', markersize=5)
-    gs = gridspec.GridSpecFromSubplotSpec(1, len(gtr.branches), subplot_spec=ax3)
+    gs = gridspec.GridSpecFromSubplotSpec(1, len(gtr.branches), subplot_spec=ax3.get_subplotspec())
     ax1.set_title("amplitude", fontsize=15)
     ax2.set_title("peak latency", fontsize=15)
 

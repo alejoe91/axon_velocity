@@ -10,31 +10,27 @@ on:
 
 jobs:
   deploy:
-
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.8
-      - name: Add conda to system path
-        run: |
-          # $CONDA is an environment variable pointing to the root of the miniconda directory
-          echo $CONDA/bin >> $GITHUB_PATH
+          python-version: "3.12"
       - name: Install dependencies
         run: |
-          pip install setuptools wheel twine
-          pip install pytest
-          pip install -r requirements.txt
+          pip install --upgrade pip
+          pip install build twine pytest
           pip install -e .
-      - name: Test with pytest and build coverage report
+      - name: Test with pytest
         run: |
           pytest
+      - name: Build package
+        run: |
+          python -m build
       - name: Publish on PyPI
         env:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
-          python setup.py sdist bdist_wheel
           twine upload dist/*

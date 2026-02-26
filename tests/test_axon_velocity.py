@@ -1,67 +1,76 @@
 import axon_velocity as av
 from pathlib import Path
 import numpy as np
-import unittest
+import pytest
 
 toy_data_folder = Path(__file__).parent / "data" / "toy"
+FS = 32000
 
 
-class TestExtractors(unittest.TestCase):
-    def setUp(self):
-        # load data
-        self.template_bifurcation = np.load(toy_data_folder / "bifurcation" / "template.npy")
-        self.locations_bifurcation = np.load(toy_data_folder / "bifurcation" / "locations.npy")
-        self.template_sinusoidal = np.load(toy_data_folder / "sinusoidal" / "template.npy")
-        self.locations_sinusoidal = np.load(toy_data_folder / "sinusoidal" / "locations.npy")
-        self.fs = 32000
+@pytest.fixture(scope="module")
+def template_bifurcation():
+    return np.load(toy_data_folder / "bifurcation" / "template.npy")
 
-        self.gtr_bif = av.compute_graph_propagation_velocity(self.template_bifurcation, self.locations_bifurcation,
-                                                             self.fs, verbose=True)
-        self.gtr_sin = av.compute_graph_propagation_velocity(self.template_sinusoidal, self.locations_sinusoidal,
-                                                             self.fs, verbose=True)
 
-    def tearDown(self):
-        pass
+@pytest.fixture(scope="module")
+def locations_bifurcation():
+    return np.load(toy_data_folder / "bifurcation" / "locations.npy")
 
-    def test_axon_velocity(self):
-        # output structure looks good
-        assert len(self.gtr_bif.branches) > 0
-        for branch in self.gtr_bif.branches:
-            assert "channels" in branch
-            assert "r2" in branch
-            assert "velocity" in branch
-            assert "peak_times" in branch
-            assert "distances" in branch
-            assert "offset" in branch
 
-        # detection removed some channels
-        assert len(self.locations_bifurcation) > len(self.gtr_bif.selected_channels)
+@pytest.fixture(scope="module")
+def template_sinusoidal():
+    return np.load(toy_data_folder / "sinusoidal" / "template.npy")
 
-        # output structure looks good
-        assert len(self.gtr_sin.branches) > 0
-        for branch in self.gtr_sin.branches:
-            assert "channels" in branch
-            assert "r2" in branch
-            assert "velocity" in branch
-            assert "peak_times" in branch
-            assert "distances" in branch
-            assert "offset" in branch
 
-        # detection removed some channels
-        assert len(self.locations_bifurcation) > len(self.gtr_sin.selected_channels)
+@pytest.fixture(scope="module")
+def locations_sinusoidal():
+    return np.load(toy_data_folder / "sinusoidal" / "locations.npy")
 
-    def test_plotting(self):
-        av.plot_template(self.template_bifurcation, self.locations_bifurcation)
-        av.plot_peak_latency_map(self.template_bifurcation, self.locations_bifurcation, self.fs)
-        av.plot_peak_latency_map(self.template_bifurcation, self.locations_bifurcation, self.fs, plot_image=False)
-        av.plot_amplitude_map(self.template_bifurcation, self.locations_bifurcation)
-        av.plot_amplitude_map(self.template_bifurcation, self.locations_bifurcation, plot_image=False)
-        av.plot_peak_std_map(self.template_bifurcation, self.locations_bifurcation, self.fs)
-        av.plot_peak_std_map(self.template_bifurcation, self.locations_bifurcation, self.fs, plot_image=False)
-        av.plot_branch_velocities(self.gtr_bif.branches)
-        av.plot_axon_summary(self.gtr_bif)
-        av.plot_branch_velocities(self.gtr_bif.branches)
 
-        for br in self.gtr_bif.branches:
-            av.plot_velocity(br["peak_times"], br["distances"], br["velocity"], br["offset"])
-            av.plot_template_propagation(self.template_bifurcation, self.locations_bifurcation, br["channels"])
+@pytest.fixture(scope="module")
+def gtr_bif(template_bifurcation, locations_bifurcation):
+    return av.compute_graph_propagation_velocity(
+        template_bifurcation, locations_bifurcation, FS, verbose=True
+    )
+
+
+@pytest.fixture(scope="module")
+def gtr_sin(template_sinusoidal, locations_sinusoidal):
+    return av.compute_graph_propagation_velocity(
+        template_sinusoidal, locations_sinusoidal, FS, verbose=True
+    )
+
+
+def _assert_branch_keys(branch):
+    for key in ("channels", "r2", "velocity", "peak_times", "distances", "offset"):
+        assert key in branch
+
+
+def test_axon_velocity_bifurcation(gtr_bif, locations_bifurcation):
+    assert len(gtr_bif.branches) > 0
+    for branch in gtr_bif.branches:
+        _assert_branch_keys(branch)
+    assert len(locations_bifurcation) > len(gtr_bif.selected_channels)
+
+
+def test_axon_velocity_sinusoidal(gtr_sin, locations_bifurcation):
+    assert len(gtr_sin.branches) > 0
+    for branch in gtr_sin.branches:
+        _assert_branch_keys(branch)
+    assert len(locations_bifurcation) > len(gtr_sin.selected_channels)
+
+
+def test_plotting(template_bifurcation, locations_bifurcation, gtr_bif):
+    av.plot_template(template_bifurcation, locations_bifurcation)
+    av.plot_peak_latency_map(template_bifurcation, locations_bifurcation, FS)
+    av.plot_peak_latency_map(template_bifurcation, locations_bifurcation, FS, plot_image=False)
+    av.plot_amplitude_map(template_bifurcation, locations_bifurcation)
+    av.plot_amplitude_map(template_bifurcation, locations_bifurcation, plot_image=False)
+    av.plot_peak_std_map(template_bifurcation, locations_bifurcation, FS)
+    av.plot_peak_std_map(template_bifurcation, locations_bifurcation, FS, plot_image=False)
+    av.plot_branch_velocities(gtr_bif.branches)
+    av.plot_axon_summary(gtr_bif)
+
+    for br in gtr_bif.branches:
+        av.plot_velocity(br["peak_times"], br["distances"], br["velocity"], br["offset"])
+        av.plot_template_propagation(template_bifurcation, locations_bifurcation, br["channels"])
