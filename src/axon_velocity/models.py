@@ -287,9 +287,9 @@ def create_mea_probe(pitch=17.5, dim=100, elec_size=5, z_offset=10):
 
 
 def planarize_swc(swc_input_file, swc_output_file=None, planar_dimension="z", span_um=10):
-    swc_dtype = np.dtype([('id', np.int32, 1), ('type', np.int16, 1),
-                          ('x', np.float32, 1), ('y', np.float32, 1), ('z', np.float32, 1),
-                          ('radius', np.float32, 1), ('parent', np.int32, 1)])
+    swc_dtype = np.dtype([('id', np.int32), ('type', np.int16),
+                          ('x', np.float32), ('y', np.float32), ('z', np.float32),
+                          ('radius', np.float32), ('parent', np.int32)])
 
     swc_input_file = Path(swc_input_file)
     swc_input = np.loadtxt(swc_input_file, dtype=swc_dtype)
